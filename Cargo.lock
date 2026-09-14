@@ -444,7 +444,6 @@ dependencies = [
  "base64",
  "crossterm",
  "dirs",
- "futures",
  "octocrab",
  "ratatui",
  "reqwest",

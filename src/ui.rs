@@ -1,3 +1,8 @@
+//! Terminal user interface rendering logic with Ratatui.
+//!
+//! Provides a responsive 3-pane Miller column layout (Repositories -> Directory Contents -> File Preview)
+//! modeled after Yazi, along with modal overlays for search, cloning, and help.
+
 use crate::app::App;
 use crate::types::{AppMode, CloneMethod, FileType, FocusedPane, Platform};
 use ratatui::{
@@ -10,6 +15,7 @@ use ratatui::{
     Frame,
 };
 
+/// Main render entry point that draws the active frame based on application state.
 pub fn draw(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -682,12 +688,39 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-fn format_file_size(bytes: u64) -> String {
+/// Formats raw byte counts into human-readable B, KB, or MB representations.
+pub fn format_file_size(bytes: u64) -> String {
     if bytes < 1024 {
         format!("{} B", bytes)
     } else if bytes < 1024 * 1024 {
         format!("{:.1} KB", bytes as f64 / 1024.0)
     } else {
         format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_file_size() {
+        assert_eq!(format_file_size(0), "0 B");
+        assert_eq!(format_file_size(512), "512 B");
+        assert_eq!(format_file_size(1023), "1023 B");
+        assert_eq!(format_file_size(1024), "1.0 KB");
+        assert_eq!(format_file_size(1536), "1.5 KB");
+        assert_eq!(format_file_size(1024 * 1024), "1.0 MB");
+        assert_eq!(format_file_size(5 * 1024 * 1024 + 512 * 1024), "5.5 MB");
+    }
+
+    #[test]
+    fn test_centered_rect() {
+        let parent = Rect::new(0, 0, 100, 50);
+        let popup = centered_rect(60, 40, parent);
+        assert_eq!(popup.width, 60);
+        assert_eq!(popup.height, 20); // 40% of 50 is 20
+        assert_eq!(popup.x, 20);      // (100 - 60) / 2 = 20
+        assert_eq!(popup.y, 15);      // (50 - 20) / 2 = 15
     }
 }

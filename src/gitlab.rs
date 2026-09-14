@@ -1,9 +1,14 @@
+//! GitLab REST API client wrapper.
+//!
+//! Handles project search and recursive tree retrieval via GitLab API v4.
+
 use crate::config::get_gitlab_token;
-use crate::types::{FileItem, FileType, RepoItem};
+use crate::types::{sort_file_items, FileItem, FileType, RepoItem};
 use anyhow::{Context, Result};
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::Deserialize;
 
+/// HTTP client for GitLab v4 API operations.
 pub struct GitLabClient {
     client: reqwest::Client,
     token: Option<String>,
@@ -31,6 +36,7 @@ struct GlTreeItem {
 }
 
 impl GitLabClient {
+    /// Creates a new GitLabClient, injecting a PRIVATE-TOKEN header if discovered.
     pub fn new() -> Result<Self> {
         let token = get_gitlab_token();
         let mut headers = HeaderMap::new();
@@ -49,10 +55,13 @@ impl GitLabClient {
         Ok(Self { client, token })
     }
 
+    /// Checks if a non-empty personal access token is configured.
+    #[must_use]
     pub fn has_token(&self) -> bool {
         self.token.is_some()
     }
 
+    /// Searches for GitLab projects matching the given query string.
     pub async fn search_projects(&self, query: &str) -> Result<Vec<RepoItem>> {
         let url = format!(
             "https://gitlab.com/api/v4/search?scope=projects&search={}",
@@ -95,6 +104,7 @@ impl GitLabClient {
         Ok(items)
     }
 
+    /// Retrieves repository tree items (files and folders) at the specified directory path.
     pub async fn get_tree(&self, project_id: &str, path: &str) -> Result<Vec<FileItem>> {
         let encoded_id = urlencoding(project_id);
         let path_param = if path.is_empty() {
@@ -123,7 +133,7 @@ impl GitLabClient {
             .await
             .context("Failed to parse GitLab tree JSON")?;
 
-        let mut items = Vec::new();
+        let mut items = Vec::with_capacity(tree_items.len());
         for item in tree_items {
             let file_type = match item.item_type.as_str() {
                 "tree" => FileType::Directory,
@@ -141,18 +151,26 @@ impl GitLabClient {
             });
         }
 
-        // Sort: directories first, then files alphabetically
-        items.sort_by(|a, b| match (a.file_type, b.file_type) {
-            (FileType::Directory, FileType::Directory) => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-            (FileType::Directory, _) => std::cmp::Ordering::Less,
-            (_, FileType::Directory) => std::cmp::Ordering::Greater,
-            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-        });
+        // Sort directories first, then alphabetically
+        sort_file_items(&mut items);
 
         Ok(items)
     }
 }
 
-fn urlencoding(s: &str) -> String {
+/// Encodes query strings or path parameters safely for URL queries.
+pub fn urlencoding(s: &str) -> String {
     url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_urlencoding_simple() {
+        assert_eq!(urlencoding("hello world"), "hello+world");
+        assert_eq!(urlencoding("foo/bar"), "foo%2Fbar");
+        assert_eq!(urlencoding("user@domain"), "user%40domain");
+    }
 }

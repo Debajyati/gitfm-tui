@@ -1,3 +1,6 @@
+//! Entry point for gitFM TUI: initializes terminal raw mode, manages the alternate screen,
+//! and dispatches keyboard events to application state and rendering loops.
+
 mod app;
 mod config;
 mod git;
@@ -26,7 +29,7 @@ async fn main() -> anyhow::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::new();
+    let mut app = App::default();
 
     // Initial search
     let _ = app.perform_search().await;

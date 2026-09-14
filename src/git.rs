@@ -1,8 +1,40 @@
+//! Git command execution engine supporting multiple cloning strategies.
+//!
+//! Handles standard full clones, shallow depth-1 clones, blobless clones (`--filter=blob:none`),
+//! treeless clones (`--filter=tree:0`), and subfolder sparse checkouts.
+
 use crate::types::CloneMethod;
 use anyhow::{Context, Result};
 use std::path::Path;
 use tokio::process::Command;
 
+/// Helper to execute a `tokio::process::Command`, stream/capture stdout and stderr into `log_output`,
+/// and ensure the command exits successfully.
+async fn run_git_command(
+    mut cmd: Command,
+    step_description: &str,
+    log_output: &mut String,
+) -> Result<()> {
+    let output = cmd
+        .output()
+        .await
+        .with_context(|| format!("Failed to execute {}", step_description))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    log_output.push_str(&stdout);
+    log_output.push_str(&stderr);
+
+    if !output.status.success() {
+        anyhow::bail!("{} failed:\n{}", step_description, log_output);
+    }
+
+    Ok(())
+}
+
+/// Clones a remote git repository using the specified clone strategy and options.
+///
+/// Returns captured logs/output from the git operations.
 pub async fn execute_clone(
     repo_url: &str,
     target_dir: &str,
@@ -21,19 +53,7 @@ pub async fn execute_clone(
             }
             cmd.arg(repo_url).arg(target_dir);
 
-            let output = cmd
-                .output()
-                .await
-                .context("Failed to execute git clone command")?;
-
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            log_output.push_str(&stdout);
-            log_output.push_str(&stderr);
-
-            if !output.status.success() {
-                anyhow::bail!("Git clone failed: {}", log_output);
-            }
+            run_git_command(cmd, "git clone", &mut log_output).await?;
         }
         CloneMethod::Shallow => {
             let mut cmd = Command::new("git");
@@ -43,19 +63,7 @@ pub async fn execute_clone(
             }
             cmd.arg(repo_url).arg(target_dir);
 
-            let output = cmd
-                .output()
-                .await
-                .context("Failed to execute shallow git clone")?;
-
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            log_output.push_str(&stdout);
-            log_output.push_str(&stderr);
-
-            if !output.status.success() {
-                anyhow::bail!("Shallow clone failed: {}", log_output);
-            }
+            run_git_command(cmd, "shallow git clone", &mut log_output).await?;
         }
         CloneMethod::Blobless => {
             let mut cmd = Command::new("git");
@@ -65,19 +73,7 @@ pub async fn execute_clone(
             }
             cmd.arg(repo_url).arg(target_dir);
 
-            let output = cmd
-                .output()
-                .await
-                .context("Failed to execute blobless git clone")?;
-
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            log_output.push_str(&stdout);
-            log_output.push_str(&stderr);
-
-            if !output.status.success() {
-                anyhow::bail!("Blobless clone failed: {}", log_output);
-            }
+            run_git_command(cmd, "blobless git clone", &mut log_output).await?;
         }
         CloneMethod::Treeless => {
             let mut cmd = Command::new("git");
@@ -87,19 +83,7 @@ pub async fn execute_clone(
             }
             cmd.arg(repo_url).arg(target_dir);
 
-            let output = cmd
-                .output()
-                .await
-                .context("Failed to execute treeless git clone")?;
-
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            log_output.push_str(&stdout);
-            log_output.push_str(&stderr);
-
-            if !output.status.success() {
-                anyhow::bail!("Treeless clone failed: {}", log_output);
-            }
+            run_git_command(cmd, "treeless git clone", &mut log_output).await?;
         }
         CloneMethod::Sparse => {
             let path_to_clone = sparse_path.unwrap_or("");
@@ -112,62 +96,39 @@ pub async fn execute_clone(
             clone_cmd.args(["clone", "--no-checkout", "--filter=blob:none"]);
             clone_cmd.arg(repo_url).arg(target_dir);
 
-            let clone_output = clone_cmd
-                .output()
-                .await
-                .context("Failed to initialize sparse clone")?;
-
-            log_output.push_str(&String::from_utf8_lossy(&clone_output.stdout));
-            log_output.push_str(&String::from_utf8_lossy(&clone_output.stderr));
-
-            if !clone_output.status.success() {
-                anyhow::bail!("Failed initial clone for sparse checkout: {}", log_output);
-            }
+            run_git_command(clone_cmd, "initial clone for sparse checkout", &mut log_output).await?;
 
             let repo_path = Path::new(target_dir);
 
             // Step 2: Set sparse-checkout --no-cone
-            let set_output = Command::new("git")
+            let mut set_cmd = Command::new("git");
+            set_cmd
                 .current_dir(repo_path)
-                .args(["sparse-checkout", "set", "--no-cone"])
-                .output()
-                .await
-                .context("Failed to set sparse-checkout mode")?;
+                .args(["sparse-checkout", "set", "--no-cone"]);
 
-            log_output.push_str(&String::from_utf8_lossy(&set_output.stdout));
-            log_output.push_str(&String::from_utf8_lossy(&set_output.stderr));
+            run_git_command(set_cmd, "sparse-checkout set --no-cone", &mut log_output).await?;
 
             // Step 3: Add directory to sparse-checkout
-            let add_output = Command::new("git")
+            let mut add_cmd = Command::new("git");
+            add_cmd
                 .current_dir(repo_path)
-                .args(["sparse-checkout", "add", "!/*", path_to_clone])
-                .output()
-                .await
-                .context("Failed to add sparse-checkout directory")?;
+                .args(["sparse-checkout", "add", "!/*", path_to_clone]);
 
-            log_output.push_str(&String::from_utf8_lossy(&add_output.stdout));
-            log_output.push_str(&String::from_utf8_lossy(&add_output.stderr));
+            run_git_command(add_cmd, "sparse-checkout add directory", &mut log_output).await?;
 
             // Step 4: Checkout target branch (or HEAD/main)
             let target_branch = if !branch.is_empty() {
-                branch.to_string()
+                branch
             } else {
-                "HEAD".to_string()
+                "HEAD"
             };
 
-            let checkout_output = Command::new("git")
+            let mut checkout_cmd = Command::new("git");
+            checkout_cmd
                 .current_dir(repo_path)
-                .args(["checkout", &target_branch])
-                .output()
-                .await
-                .context("Failed to checkout branch during sparse checkout")?;
+                .args(["checkout", target_branch]);
 
-            log_output.push_str(&String::from_utf8_lossy(&checkout_output.stdout));
-            log_output.push_str(&String::from_utf8_lossy(&checkout_output.stderr));
-
-            if !checkout_output.status.success() {
-                anyhow::bail!("Sparse checkout failed at checkout step: {}", log_output);
-            }
+            run_git_command(checkout_cmd, "sparse-checkout branch checkout", &mut log_output).await?;
         }
     }
 

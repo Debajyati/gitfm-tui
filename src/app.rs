@@ -16,6 +16,8 @@ pub struct App {
     pub focused_pane: FocusedPane,
     pub search_query: String,
     pub search_input: String,
+    pub show_dashboard: bool,
+    pub greeting_banner: String,
 
     pub repos: Vec<RepoItem>,
     pub repo_selected_index: usize,
@@ -55,13 +57,17 @@ impl App {
     pub fn new() -> Self {
         let gh = GitHubClient::new().ok();
         let gl = GitLabClient::new().ok();
+        let banners = crate::banner::load_greeting_banners();
+        let banner = crate::banner::pick_random_banner(&banners);
 
         Self {
             platform: Platform::GitHub,
             mode: AppMode::Normal,
             focused_pane: FocusedPane::RepoList,
-            search_query: "gitfm".to_string(),
+            search_query: String::new(),
             search_input: String::new(),
+            show_dashboard: true,
+            greeting_banner: banner,
 
             repos: Vec::new(),
             repo_selected_index: 0,
@@ -163,6 +169,12 @@ impl App {
         }
     }
 
+    /// Re-picks a random banner for the dashboard.
+    pub fn randomize_banner(&mut self) {
+        let banners = crate::banner::load_greeting_banners();
+        self.greeting_banner = crate::banner::pick_random_banner(&banners);
+    }
+
     /// Performs asynchronous search on the currently active platform.
     pub async fn perform_search(&mut self) -> Result<()> {
         let query = self.search_query.trim().to_string();
@@ -170,6 +182,7 @@ impl App {
             return Ok(());
         }
 
+        self.show_dashboard = false;
         self.is_loading = true;
         self.error_message = None;
         self.status_message = format!("Searching {} for '{}'...", self.platform.name(), query);
@@ -404,6 +417,8 @@ mod tests {
         assert!(app.repos.is_empty());
         assert!(app.files.is_empty());
         assert_eq!(app.current_path_string(), "");
+        assert!(app.show_dashboard);
+        assert!(!app.greeting_banner.is_empty());
     }
 
     #[tokio::test]

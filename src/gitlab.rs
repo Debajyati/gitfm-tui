@@ -110,9 +110,9 @@ impl GitLabClient {
         let path_param = if path.is_empty() {
             String::new()
         } else {
-            format!("&path={}", urlencoding(path))
+            std::format!("&path={}", urlencoding(path))
         };
-        let url = format!(
+        let url = std::format!(
             "https://gitlab.com/api/v4/projects/{}/repository/tree?per_page=100{}",
             encoded_id, path_param
         );

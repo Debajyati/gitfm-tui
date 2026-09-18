@@ -27,7 +27,11 @@ pub fn draw(f: &mut Frame, app: &App) {
         .split(f.area());
 
     draw_header(f, app, chunks[0]);
-    draw_miller_columns(f, app, chunks[1]);
+    if app.show_dashboard {
+        draw_dashboard(f, app, chunks[1]);
+    } else {
+        draw_miller_columns(f, app, chunks[1]);
+    }
     draw_footer(f, app, chunks[2]);
 
     // Draw modals if active
@@ -259,7 +263,7 @@ fn draw_file_column(f: &mut Frame, app: &App, area: Rect) {
     let path_display = if app.current_path.is_empty() {
         "/ (root)".to_string()
     } else {
-        format!("/{}", app.current_path_string())
+        std::format!("/{}", app.current_path_string())
     };
 
     let title = format!(" Files: {} ({}) ", path_display, app.files.len());
@@ -382,6 +386,116 @@ fn draw_preview_column(f: &mut Frame, app: &App, area: Rect) {
     }
 }
 
+fn draw_dashboard(f: &mut Frame, app: &App, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" 🏠 Home Dashboard ")
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::Cyan));
+
+    // Pad each banner line so all lines have identical width, preserving ASCII art alignment when centered
+    let banner_raw_lines: Vec<&str> = app.greeting_banner.lines().collect();
+    let max_banner_width = banner_raw_lines
+        .iter()
+        .map(|l| l.chars().count())
+        .max()
+        .unwrap_or(0);
+
+    let mut lines = Vec::new();
+
+    // Top vertical padding for a well-centered aesthetic layout
+    let estimated_content_lines = banner_raw_lines.len() + 11;
+    let top_padding = (area.height.saturating_sub(2) as usize)
+        .saturating_sub(estimated_content_lines)
+        / 2;
+
+    for _ in 0..top_padding.min(3) {
+        lines.push(Line::from(""));
+    }
+
+    // Graphical ASCII Font Banner
+    for line in &banner_raw_lines {
+        let char_count = line.chars().count();
+        let trailing_padding = " ".repeat(max_banner_width.saturating_sub(char_count));
+        let padded_line = format!("{}{}", line, trailing_padding);
+        lines.push(Line::from(Span::styled(
+            padded_line,
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+        )));
+    }
+
+    lines.push(Line::from(""));
+
+    // Welcome & appreciation messages
+    lines.push(Line::from(vec![
+        Span::styled(
+            "👋 Welcome to gitFM TUI! ",
+            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            "Thank you for using gitFM.",
+            Style::default().fg(Color::LightGreen).add_modifier(Modifier::BOLD),
+        ),
+    ]));
+
+    lines.push(Line::from(vec![
+        Span::styled(
+            "Interactive GitHub & GitLab terminal file manager with high-performance clone workflows.",
+            Style::default().fg(Color::DarkGray),
+        ),
+    ]));
+
+    lines.push(Line::from(""));
+
+    // Support and repository links
+    lines.push(Line::from(vec![
+        Span::styled(
+            "⭐ If you like using the app, please star the repo: ",
+            Style::default().fg(Color::Yellow),
+        ),
+        Span::styled(
+            "github.com/Debajyati/gitfm-tui",
+            Style::default()
+                .fg(Color::LightCyan)
+                .add_modifier(Modifier::UNDERLINED)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ]));
+
+    lines.push(Line::from(vec![
+        Span::styled("💖 Or sponsor me :love:", Style::default().fg(Color::LightRed).add_modifier(Modifier::BOLD)),
+    ]));
+
+    lines.push(Line::from(""));
+
+    // Quick Action shortcuts guide
+    lines.push(Line::from(Span::styled(
+        "── Quick Shortcuts ────────────────────────────────────────────────",
+        Style::default().fg(Color::DarkGray),
+    )));
+
+    lines.push(Line::from(vec![
+        Span::styled("  [ / ]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::styled(" or ", Style::default().fg(Color::DarkGray)),
+        Span::styled("[ s ]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::raw(" Search Repositories      "),
+        Span::styled("[ Tab ]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::raw(format!(" Switch Platform ({})      ", app.platform.name())),
+        Span::styled("[ r ]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::raw(" Cycle ASCII Font      "),
+        Span::styled("[ ? ]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::raw(" Help      "),
+        Span::styled("[ q ]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::raw(" Quit"),
+    ]));
+
+    let p = Paragraph::new(lines)
+        .alignment(Alignment::Center)
+        .block(block);
+
+    f.render_widget(p, area);
+}
+
 fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
     let (msg_color, msg_prefix) = if let Some(ref err) = app.error_message {
         (Color::Red, format!("❌ {}", err))
@@ -391,24 +505,43 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
         (Color::White, app.status_message.clone())
     };
 
-    let key_hints = Line::from(vec![
-        Span::styled(format!(" {} ", msg_prefix), Style::default().fg(msg_color)),
-        Span::raw(" | "),
-        Span::styled("/", Style::default().fg(Color::Yellow)),
-        Span::raw(" Search  "),
-        Span::styled("Tab", Style::default().fg(Color::Yellow)),
-        Span::raw(" Platform  "),
-        Span::styled("h/j/k/l", Style::default().fg(Color::Yellow)),
-        Span::raw(" Nav  "),
-        Span::styled("c", Style::default().fg(Color::Yellow)),
-        Span::raw(" Clone  "),
-        Span::styled("r", Style::default().fg(Color::Yellow)),
-        Span::raw(" Refresh  "),
-        Span::styled("?", Style::default().fg(Color::Yellow)),
-        Span::raw(" Help  "),
-        Span::styled("q", Style::default().fg(Color::Yellow)),
-        Span::raw(" Quit "),
-    ]);
+    let key_hints = if app.show_dashboard {
+        Line::from(vec![
+            Span::styled(format!(" {} ", msg_prefix), Style::default().fg(msg_color)),
+            Span::raw(" | "),
+            Span::styled("/", Style::default().fg(Color::Yellow)),
+            Span::raw(" Search  "),
+            Span::styled("Tab", Style::default().fg(Color::Yellow)),
+            Span::raw(" Platform  "),
+            Span::styled("r", Style::default().fg(Color::Yellow)),
+            Span::raw(" Random Font  "),
+            Span::styled("?", Style::default().fg(Color::Yellow)),
+            Span::raw(" Help  "),
+            Span::styled("q", Style::default().fg(Color::Yellow)),
+            Span::raw(" Quit "),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled(format!(" {} ", msg_prefix), Style::default().fg(msg_color)),
+            Span::raw(" | "),
+            Span::styled("/", Style::default().fg(Color::Yellow)),
+            Span::raw(" Search  "),
+            Span::styled("Tab", Style::default().fg(Color::Yellow)),
+            Span::raw(" Platform  "),
+            Span::styled("h/j/k/l", Style::default().fg(Color::Yellow)),
+            Span::raw(" Nav  "),
+            Span::styled("c", Style::default().fg(Color::Yellow)),
+            Span::raw(" Clone  "),
+            Span::styled("d", Style::default().fg(Color::Yellow)),
+            Span::raw(" Dashboard  "),
+            Span::styled("r", Style::default().fg(Color::Yellow)),
+            Span::raw(" Refresh  "),
+            Span::styled("?", Style::default().fg(Color::Yellow)),
+            Span::raw(" Help  "),
+            Span::styled("q", Style::default().fg(Color::Yellow)),
+            Span::raw(" Quit "),
+        ])
+    };
 
     let footer = Paragraph::new(key_hints)
         .style(Style::default().bg(Color::Rgb(20, 20, 25)));
@@ -650,7 +783,8 @@ fn draw_help_modal(f: &mut Frame) {
         Line::from("  c              : Open Clone Dialog (supports Sparse for current folder!)"),
         Line::from("  / or s         : Search GitHub or GitLab repositories"),
         Line::from("  Tab            : Toggle between GitHub and GitLab platforms"),
-        Line::from("  r              : Refresh directory contents / repositories"),
+        Line::from("  d              : Return to Home Dashboard"),
+        Line::from("  r              : Refresh contents / Cycle dashboard ASCII font"),
         Line::from("  ?              : Toggle this help menu"),
         Line::from("  q / Esc        : Back / Close modal / Quit application"),
         Line::from(""),
@@ -691,11 +825,11 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 /// Formats raw byte counts into human-readable B, KB, or MB representations.
 pub fn format_file_size(bytes: u64) -> String {
     if bytes < 1024 {
-        format!("{} B", bytes)
+        std::format!("{} B", bytes)
     } else if bytes < 1024 * 1024 {
-        format!("{:.1} KB", bytes as f64 / 1024.0)
+        std::format!("{:.1} KB", bytes as f64 / 1024.0)
     } else {
-        format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+        std::format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
     }
 }
 

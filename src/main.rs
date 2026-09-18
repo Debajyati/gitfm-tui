@@ -2,6 +2,7 @@
 //! and dispatches keyboard events to application state and rendering loops.
 
 mod app;
+mod banner;
 mod config;
 mod git;
 mod github;
@@ -30,9 +31,6 @@ async fn main() -> anyhow::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let mut app = App::default();
-
-    // Initial search
-    let _ = app.perform_search().await;
 
     let res = run_app(&mut terminal, &mut app).await;
 
@@ -68,96 +66,127 @@ async fn run_app(
                 }
 
                 match app.mode {
-                    AppMode::Normal => match key.code {
-                        KeyCode::Char('q') => return Ok(()),
-                        KeyCode::Char('?') => {
-                            app.mode = AppMode::HelpModal;
-                        }
-                        KeyCode::Tab => {
-                            app.switch_platform();
-                            let _ = app.perform_search().await;
-                        }
-                        KeyCode::Char('/') | KeyCode::Char('s') => {
-                            app.search_input.clear();
-                            app.mode = AppMode::SearchInput;
-                        }
-                        KeyCode::Char('c') => {
-                            if app.selected_repo().is_some() {
-                                app.prepare_clone_modal();
+                    AppMode::Normal => {
+                        if app.show_dashboard {
+                            match key.code {
+                                KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
+                                KeyCode::Char('?') => {
+                                    app.mode = AppMode::HelpModal;
+                                }
+                                KeyCode::Tab => {
+                                    app.switch_platform();
+                                }
+                                KeyCode::Char('/') | KeyCode::Char('s') | KeyCode::Enter => {
+                                    app.search_input.clear();
+                                    app.mode = AppMode::SearchInput;
+                                }
+                                KeyCode::Char('r') => {
+                                    app.randomize_banner();
+                                }
+                                _ => {}
                             }
-                        }
-                        KeyCode::Char('r') => {
-                            if app.focused_pane == FocusedPane::RepoList {
-                                let _ = app.perform_search().await;
-                            } else {
-                                let _ = app.load_current_folder().await;
-                            }
-                        }
-                        KeyCode::Char('j') | KeyCode::Down => match app.focused_pane {
-                            FocusedPane::RepoList => {
-                                app.select_next_repo();
-                            }
-                            FocusedPane::FileList => {
-                                app.select_next_file();
-                                app.load_preview().await;
-                            }
-                            FocusedPane::Preview => {
-                                app.preview_scroll = app.preview_scroll.saturating_add(1);
-                            }
-                        },
-                        KeyCode::Char('k') | KeyCode::Up => match app.focused_pane {
-                            FocusedPane::RepoList => {
-                                app.select_prev_repo();
-                            }
-                            FocusedPane::FileList => {
-                                app.select_prev_file();
-                                app.load_preview().await;
-                            }
-                            FocusedPane::Preview => {
-                                app.preview_scroll = app.preview_scroll.saturating_sub(1);
-                            }
-                        },
-                        KeyCode::Char('l') | KeyCode::Right | KeyCode::Enter => {
-                            match app.focused_pane {
-                                FocusedPane::RepoList => {
+                        } else {
+                            match key.code {
+                                KeyCode::Char('q') => return Ok(()),
+                                KeyCode::Char('d') => {
+                                    app.show_dashboard = true;
+                                    app.status_message = "Press '/' to search, 'Tab' to switch platform, '?' for help".to_string();
+                                }
+                                KeyCode::Char('?') => {
+                                    app.mode = AppMode::HelpModal;
+                                }
+                                KeyCode::Tab => {
+                                    app.switch_platform();
+                                    if !app.search_query.is_empty() {
+                                        let _ = app.perform_search().await;
+                                    }
+                                }
+                                KeyCode::Char('/') | KeyCode::Char('s') => {
+                                    app.search_input.clear();
+                                    app.mode = AppMode::SearchInput;
+                                }
+                                KeyCode::Char('c') => {
                                     if app.selected_repo().is_some() {
-                                        app.focused_pane = FocusedPane::FileList;
-                                        app.current_path.clear();
+                                        app.prepare_clone_modal();
+                                    }
+                                }
+                                KeyCode::Char('r') => {
+                                    if app.focused_pane == FocusedPane::RepoList {
+                                        let _ = app.perform_search().await;
+                                    } else {
                                         let _ = app.load_current_folder().await;
                                     }
                                 }
-                                FocusedPane::FileList => {
-                                    if let Some(file) = app.selected_file() {
-                                        if file.file_type == FileType::Directory {
-                                            let dir_name = file.name.clone();
-                                            app.current_path.push(dir_name);
-                                            let _ = app.load_current_folder().await;
-                                        } else {
-                                            app.load_preview().await;
-                                            app.focused_pane = FocusedPane::Preview;
+                                KeyCode::Char('j') | KeyCode::Down => match app.focused_pane {
+                                    FocusedPane::RepoList => {
+                                        app.select_next_repo();
+                                    }
+                                    FocusedPane::FileList => {
+                                        app.select_next_file();
+                                        app.load_preview().await;
+                                    }
+                                    FocusedPane::Preview => {
+                                        app.preview_scroll = app.preview_scroll.saturating_add(1);
+                                    }
+                                },
+                                KeyCode::Char('k') | KeyCode::Up => match app.focused_pane {
+                                    FocusedPane::RepoList => {
+                                        app.select_prev_repo();
+                                    }
+                                    FocusedPane::FileList => {
+                                        app.select_prev_file();
+                                        app.load_preview().await;
+                                    }
+                                    FocusedPane::Preview => {
+                                        app.preview_scroll = app.preview_scroll.saturating_sub(1);
+                                    }
+                                },
+                                KeyCode::Char('l') | KeyCode::Right | KeyCode::Enter => {
+                                    match app.focused_pane {
+                                        FocusedPane::RepoList => {
+                                            if app.selected_repo().is_some() {
+                                                app.focused_pane = FocusedPane::FileList;
+                                                app.current_path.clear();
+                                                let _ = app.load_current_folder().await;
+                                            }
                                         }
+                                        FocusedPane::FileList => {
+                                            if let Some(file) = app.selected_file() {
+                                                if file.file_type == FileType::Directory {
+                                                    let dir_name = file.name.clone();
+                                                    app.current_path.push(dir_name);
+                                                    let _ = app.load_current_folder().await;
+                                                } else {
+                                                    app.load_preview().await;
+                                                    app.focused_pane = FocusedPane::Preview;
+                                                }
+                                            }
+                                        }
+                                        FocusedPane::Preview => {}
                                     }
                                 }
-                                FocusedPane::Preview => {}
+                                KeyCode::Char('h') | KeyCode::Left => match app.focused_pane {
+                                    FocusedPane::Preview => {
+                                        app.focused_pane = FocusedPane::FileList;
+                                    }
+                                    FocusedPane::FileList => {
+                                        if !app.current_path.is_empty() {
+                                            app.current_path.pop();
+                                            let _ = app.load_current_folder().await;
+                                        } else {
+                                            app.focused_pane = FocusedPane::RepoList;
+                                            app.files.clear();
+                                        }
+                                    }
+                                    FocusedPane::RepoList => {
+                                        app.show_dashboard = true;
+                                        app.status_message = "Press '/' to search, 'Tab' to switch platform, '?' for help".to_string();
+                                    }
+                                },
+                                _ => {}
                             }
                         }
-                        KeyCode::Char('h') | KeyCode::Left => match app.focused_pane {
-                            FocusedPane::Preview => {
-                                app.focused_pane = FocusedPane::FileList;
-                            }
-                            FocusedPane::FileList => {
-                                if !app.current_path.is_empty() {
-                                    app.current_path.pop();
-                                    let _ = app.load_current_folder().await;
-                                } else {
-                                    app.focused_pane = FocusedPane::RepoList;
-                                    app.files.clear();
-                                }
-                            }
-                            FocusedPane::RepoList => {}
-                        },
-                        _ => {}
-                    },
+                    }
 
                     AppMode::SearchInput => match key.code {
                         KeyCode::Enter => {

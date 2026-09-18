@@ -9,6 +9,7 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use serde::Deserialize;
 
 /// HTTP client for GitLab v4 API operations.
+#[derive(Clone)]
 pub struct GitLabClient {
     client: reqwest::Client,
     token: Option<String>,

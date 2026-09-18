@@ -97,24 +97,31 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         );
     f.render_widget(tabs, header_chunks[1]);
 
-    // Query badge / Auth status
-    let auth_text = match app.platform {
-        Platform::GitHub => {
-            if app.github_client.is_some() {
-                Span::styled("● GitHub Ready", Style::default().fg(Color::Green))
-            } else {
-                Span::styled("○ Public Mode", Style::default().fg(Color::Yellow))
-            }
-        }
-        Platform::GitLab => {
-            if let Some(ref gl) = app.gitlab_client {
-                if gl.has_token() {
-                    Span::styled("● GitLab Token Set", Style::default().fg(Color::Green))
+    // Query badge / Auth status / Spinner indicator
+    let auth_text = if app.is_loading {
+        Span::styled(
+            format!("{} Working...", app.spinner_frame()),
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+        )
+    } else {
+        match app.platform {
+            Platform::GitHub => {
+                if app.github_client.is_some() {
+                    Span::styled("● GitHub Ready", Style::default().fg(Color::Green))
                 } else {
                     Span::styled("○ Public Mode", Style::default().fg(Color::Yellow))
                 }
-            } else {
-                Span::styled("○ Public Mode", Style::default().fg(Color::Yellow))
+            }
+            Platform::GitLab => {
+                if let Some(ref gl) = app.gitlab_client {
+                    if gl.has_token() {
+                        Span::styled("● GitLab Token Set", Style::default().fg(Color::Green))
+                    } else {
+                        Span::styled("○ Public Mode", Style::default().fg(Color::Yellow))
+                    }
+                } else {
+                    Span::styled("○ Public Mode", Style::default().fg(Color::Yellow))
+                }
             }
         }
     };
@@ -148,6 +155,41 @@ fn draw_miller_columns(f: &mut Frame, app: &App, area: Rect) {
 fn draw_repo_column(f: &mut Frame, app: &App, area: Rect) {
     let is_focused = app.focused_pane == FocusedPane::RepoList;
     let border_color = if is_focused { Color::Green } else { Color::DarkGray };
+
+    if app.is_loading && app.repos.is_empty() {
+        let loading_lines = vec![
+            Line::from(""),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(
+                    format!(" {} ", app.spinner_frame()),
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "Searching...",
+                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(Span::styled(
+                format!("Querying {} API for '{}'...", app.platform.name(), &app.search_query),
+                Style::default().fg(Color::DarkGray),
+            )),
+            Line::from(""),
+            Line::from(Span::styled("Please wait...", Style::default().fg(Color::DarkGray))),
+        ];
+        let p = Paragraph::new(loading_lines)
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(format!(" Repositories {} ", app.spinner_frame()))
+                    .border_type(if is_focused { BorderType::Thick } else { BorderType::Rounded })
+                    .border_style(Style::default().fg(border_color)),
+            );
+        f.render_widget(p, area);
+        return;
+    }
 
     let items: Vec<ListItem> = app
         .repos
@@ -191,11 +233,20 @@ fn draw_repo_column(f: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
-    let title = format!(
-        " Repositories ({}) [{}] ",
-        app.repos.len(),
-        if app.search_query.is_empty() { "none" } else { &app.search_query }
-    );
+    let title = if app.is_loading {
+        format!(
+            " Repositories ({}) {} [{}] ",
+            app.repos.len(),
+            app.spinner_frame(),
+            if app.search_query.is_empty() { "none" } else { &app.search_query }
+        )
+    } else {
+        format!(
+            " Repositories ({}) [{}] ",
+            app.repos.len(),
+            if app.search_query.is_empty() { "none" } else { &app.search_query }
+        )
+    };
 
     let list = List::new(items)
         .block(
@@ -212,6 +263,45 @@ fn draw_repo_column(f: &mut Frame, app: &App, area: Rect) {
 fn draw_file_column(f: &mut Frame, app: &App, area: Rect) {
     let is_focused = app.focused_pane == FocusedPane::FileList;
     let border_color = if is_focused { Color::Green } else { Color::DarkGray };
+
+    let path_display = if app.current_path.is_empty() {
+        "/ (root)".to_string()
+    } else {
+        std::format!("/{}", app.current_path_string())
+    };
+
+    if app.is_loading && app.files.is_empty() {
+        let loading_lines = vec![
+            Line::from(""),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(
+                    format!(" {} ", app.spinner_frame()),
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "Loading contents...",
+                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(Span::styled(
+                format!("Fetching directory tree for {}...", path_display),
+                Style::default().fg(Color::DarkGray),
+            )),
+        ];
+        let p = Paragraph::new(loading_lines)
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(format!(" Files {} ", app.spinner_frame()))
+                    .border_type(if is_focused { BorderType::Thick } else { BorderType::Rounded })
+                    .border_style(Style::default().fg(border_color)),
+            );
+        f.render_widget(p, area);
+        return;
+    }
 
     let items: Vec<ListItem> = app
         .files
@@ -260,13 +350,11 @@ fn draw_file_column(f: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
-    let path_display = if app.current_path.is_empty() {
-        "/ (root)".to_string()
+    let title = if app.is_loading {
+        format!(" Files: {} {} ({}) ", path_display, app.spinner_frame(), app.files.len())
     } else {
-        std::format!("/{}", app.current_path_string())
+        format!(" Files: {} ({}) ", path_display, app.files.len())
     };
-
-    let title = format!(" Files: {} ({}) ", path_display, app.files.len());
 
     let list = List::new(items)
         .block(
@@ -289,6 +377,33 @@ fn draw_preview_column(f: &mut Frame, app: &App, area: Rect) {
         .title(" Preview / Details ")
         .border_type(if is_focused { BorderType::Thick } else { BorderType::Rounded })
         .border_style(Style::default().fg(border_color));
+
+    if app.is_preview_loading {
+        let loading_lines = vec![
+            Line::from(""),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(
+                    format!(" {} ", app.spinner_frame()),
+                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "Loading file preview...",
+                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Fetching raw content from remote...",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ];
+        let p = Paragraph::new(loading_lines)
+            .alignment(Alignment::Center)
+            .block(block);
+        f.render_widget(p, area);
+        return;
+    }
 
     if let Some(ref text) = app.preview_content {
         // File Content Preview
@@ -463,7 +578,7 @@ fn draw_dashboard(f: &mut Frame, app: &App, area: Rect) {
     ]));
 
     lines.push(Line::from(vec![
-        Span::styled("💖 Or sponsor me :love:", Style::default().fg(Color::LightRed).add_modifier(Modifier::BOLD)),
+        Span::styled("💖 Or sponsor me", Style::default().fg(Color::LightRed).add_modifier(Modifier::BOLD)),
     ]));
 
     lines.push(Line::from(""));
@@ -697,23 +812,34 @@ fn draw_clone_modal(f: &mut Frame, app: &App) {
 }
 
 fn draw_cloning_progress_modal(f: &mut Frame, app: &App) {
-    let area = centered_rect(60, 30, f.area());
+    let area = centered_rect(65, 32, f.area());
     f.render_widget(Clear, area);
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(" Cloning In Progress ⏳ ")
+        .title(format!(" Cloning In Progress {} ", app.spinner_frame()))
         .border_type(BorderType::Double)
         .border_style(Style::default().fg(Color::Yellow));
 
     let p = Paragraph::new(vec![
         Line::from(""),
-        Line::from(Span::styled("Executing Git Clone command...", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+        Line::from(vec![
+            Span::styled(
+                format!(" {} ", app.spinner_frame()),
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "Executing Git Clone...",
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            ),
+        ]),
         Line::from(""),
         Line::from(Span::styled(format!("Target: ./{}", app.clone_dir_input), Style::default().fg(Color::White))),
         Line::from(Span::styled(format!("Method: {}", app.clone_method.name()), Style::default().fg(Color::Yellow))),
         Line::from(""),
-        Line::from(Span::styled("Please wait while git fetches the repository data...", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled(&app.status_message, Style::default().fg(Color::LightCyan))),
+        Line::from(""),
+        Line::from(Span::styled("Transferring objects over the network. Please wait...", Style::default().fg(Color::DarkGray))),
     ])
     .alignment(Alignment::Center)
     .block(block);

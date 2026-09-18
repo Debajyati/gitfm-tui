@@ -51,10 +51,18 @@ async fn run_app(
     app: &mut App,
 ) -> anyhow::Result<()> {
     loop {
+        // Drain any incoming background task results
+        while let Ok(res) = app.rx.try_recv() {
+            app.handle_task_result(res);
+        }
+
+        // Advance spinner animation frame if loading
+        app.tick_spinner();
+
         terminal.draw(|f| ui::draw(f, app))?;
 
-        // Poll events with a short timeout to allow async ticks and responsive renders
-        if event::poll(Duration::from_millis(50))? {
+        // Poll events with an 80ms timeout to allow smooth spinner rotation (~12.5 FPS) and responsive renders
+        if event::poll(Duration::from_millis(80))? {
             if let Event::Key(key) = event::read()? {
                 if key.kind != KeyEventKind::Press {
                     continue;
@@ -98,7 +106,7 @@ async fn run_app(
                                 KeyCode::Tab => {
                                     app.switch_platform();
                                     if !app.search_query.is_empty() {
-                                        let _ = app.perform_search().await;
+                                        app.trigger_search();
                                     }
                                 }
                                 KeyCode::Char('/') | KeyCode::Char('s') => {
@@ -112,9 +120,9 @@ async fn run_app(
                                 }
                                 KeyCode::Char('r') => {
                                     if app.focused_pane == FocusedPane::RepoList {
-                                        let _ = app.perform_search().await;
+                                        app.trigger_search();
                                     } else {
-                                        let _ = app.load_current_folder().await;
+                                        app.trigger_load_current_folder();
                                     }
                                 }
                                 KeyCode::Char('j') | KeyCode::Down => match app.focused_pane {
@@ -123,7 +131,7 @@ async fn run_app(
                                     }
                                     FocusedPane::FileList => {
                                         app.select_next_file();
-                                        app.load_preview().await;
+                                        app.trigger_load_preview();
                                     }
                                     FocusedPane::Preview => {
                                         app.preview_scroll = app.preview_scroll.saturating_add(1);
@@ -135,7 +143,7 @@ async fn run_app(
                                     }
                                     FocusedPane::FileList => {
                                         app.select_prev_file();
-                                        app.load_preview().await;
+                                        app.trigger_load_preview();
                                     }
                                     FocusedPane::Preview => {
                                         app.preview_scroll = app.preview_scroll.saturating_sub(1);
@@ -147,7 +155,7 @@ async fn run_app(
                                             if app.selected_repo().is_some() {
                                                 app.focused_pane = FocusedPane::FileList;
                                                 app.current_path.clear();
-                                                let _ = app.load_current_folder().await;
+                                                app.trigger_load_current_folder();
                                             }
                                         }
                                         FocusedPane::FileList => {
@@ -155,9 +163,9 @@ async fn run_app(
                                                 if file.file_type == FileType::Directory {
                                                     let dir_name = file.name.clone();
                                                     app.current_path.push(dir_name);
-                                                    let _ = app.load_current_folder().await;
+                                                    app.trigger_load_current_folder();
                                                 } else {
-                                                    app.load_preview().await;
+                                                    app.trigger_load_preview();
                                                     app.focused_pane = FocusedPane::Preview;
                                                 }
                                             }
@@ -172,7 +180,7 @@ async fn run_app(
                                     FocusedPane::FileList => {
                                         if !app.current_path.is_empty() {
                                             app.current_path.pop();
-                                            let _ = app.load_current_folder().await;
+                                            app.trigger_load_current_folder();
                                         } else {
                                             app.focused_pane = FocusedPane::RepoList;
                                             app.files.clear();
@@ -194,7 +202,7 @@ async fn run_app(
                             if !q.is_empty() {
                                 app.search_query = q;
                                 app.mode = AppMode::Normal;
-                                let _ = app.perform_search().await;
+                                app.trigger_search();
                             } else {
                                 app.mode = AppMode::Normal;
                             }
@@ -219,7 +227,7 @@ async fn run_app(
                             app.clone_focused_field = (app.clone_focused_field + 1) % 3;
                         }
                         KeyCode::Enter => {
-                            app.start_cloning().await;
+                            app.trigger_start_cloning();
                         }
                         KeyCode::Left | KeyCode::Up if app.clone_focused_field == 0 => {
                             let methods = CloneMethod::all();

@@ -1,13 +1,37 @@
 //! Main application state and business logic coordination.
 //!
 //! Manages active platform, repositories, directory navigation, file previews,
-//! and clone operations.
+//! async background task channels, and clone operations.
 
 use crate::git::execute_clone;
 use crate::github::GitHubClient;
 use crate::gitlab::GitLabClient;
 use crate::types::{AppMode, CloneMethod, FileItem, FileType, FocusedPane, Platform, RepoItem};
 use anyhow::Result;
+
+/// Braille spinner animation frames (80ms per frame).
+pub const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+/// Background asynchronous task results passed back to the main UI loop.
+pub enum TaskResult {
+    Search {
+        platform: Platform,
+        query: String,
+        result: Result<Vec<RepoItem>, String>,
+    },
+    FolderContents {
+        path: String,
+        result: Result<Vec<FileItem>, String>,
+    },
+    FilePreview {
+        path: String,
+        result: Result<Option<String>, String>,
+    },
+    CloneFinished {
+        target_dir: String,
+        result: Result<String, String>,
+    },
+}
 
 /// Core application state for gitFM TUI.
 pub struct App {
@@ -30,6 +54,8 @@ pub struct App {
     pub preview_scroll: usize,
 
     pub is_loading: bool,
+    pub is_preview_loading: bool,
+    pub spinner_tick: usize,
     pub status_message: String,
     pub error_message: Option<String>,
 
@@ -43,6 +69,9 @@ pub struct App {
 
     pub github_client: Option<GitHubClient>,
     pub gitlab_client: Option<GitLabClient>,
+
+    pub tx: tokio::sync::mpsc::UnboundedSender<TaskResult>,
+    pub rx: tokio::sync::mpsc::UnboundedReceiver<TaskResult>,
 }
 
 impl Default for App {
@@ -59,6 +88,7 @@ impl App {
         let gl = GitLabClient::new().ok();
         let banners = crate::banner::load_greeting_banners();
         let banner = crate::banner::pick_random_banner(&banners);
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 
         Self {
             platform: Platform::GitHub,
@@ -80,6 +110,8 @@ impl App {
             preview_scroll: 0,
 
             is_loading: false,
+            is_preview_loading: false,
+            spinner_tick: 0,
             status_message: "Press '/' to search, 'Tab' to switch platform, '?' for help".to_string(),
             error_message: None,
 
@@ -92,6 +124,22 @@ impl App {
 
             github_client: gh,
             gitlab_client: gl,
+
+            tx,
+            rx,
+        }
+    }
+
+    /// Returns the current spinner frame character.
+    #[must_use]
+    pub fn spinner_frame(&self) -> &'static str {
+        SPINNER_FRAMES[self.spinner_tick % SPINNER_FRAMES.len()]
+    }
+
+    /// Advances the spinner animation frame if any async task is active.
+    pub fn tick_spinner(&mut self) {
+        if self.is_loading || self.is_preview_loading {
+            self.spinner_tick = self.spinner_tick.wrapping_add(1);
         }
     }
 
@@ -175,11 +223,11 @@ impl App {
         self.greeting_banner = crate::banner::pick_random_banner(&banners);
     }
 
-    /// Performs asynchronous search on the currently active platform.
-    pub async fn perform_search(&mut self) -> Result<()> {
+    /// Triggers an asynchronous search on the active platform in a background tokio task.
+    pub fn trigger_search(&mut self) {
         let query = self.search_query.trim().to_string();
         if query.is_empty() {
-            return Ok(());
+            return;
         }
 
         self.show_dashboard = false;
@@ -187,58 +235,42 @@ impl App {
         self.error_message = None;
         self.status_message = format!("Searching {} for '{}'...", self.platform.name(), query);
 
-        match self.platform {
-            Platform::GitHub => {
-                if let Some(ref client) = self.github_client {
-                    match client.search_repositories(&query).await {
-                        Ok(items) => {
-                            self.repos = items;
-                            self.repo_selected_index = 0;
-                            self.files.clear();
-                            self.file_selected_index = 0;
-                            self.current_path.clear();
-                            self.preview_content = None;
-                            self.status_message = format!("Found {} repositories", self.repos.len());
-                        }
-                        Err(err) => {
-                            self.error_message = Some(format!("GitHub search failed: {}", err));
-                        }
-                    }
-                } else {
-                    self.error_message = Some("GitHub client not available".to_string());
-                }
-            }
-            Platform::GitLab => {
-                if let Some(ref client) = self.gitlab_client {
-                    match client.search_projects(&query).await {
-                        Ok(items) => {
-                            self.repos = items;
-                            self.repo_selected_index = 0;
-                            self.files.clear();
-                            self.file_selected_index = 0;
-                            self.current_path.clear();
-                            self.preview_content = None;
-                            self.status_message = format!("Found {} projects", self.repos.len());
-                        }
-                        Err(err) => {
-                            self.error_message = Some(format!("GitLab search failed: {}", err));
-                        }
-                    }
-                } else {
-                    self.error_message = Some("GitLab client not available".to_string());
-                }
-            }
-        }
+        let platform = self.platform;
+        let tx = self.tx.clone();
+        let gh = self.github_client.clone();
+        let gl = self.gitlab_client.clone();
 
-        self.is_loading = false;
-        Ok(())
+        tokio::spawn(async move {
+            let result = match platform {
+                Platform::GitHub => {
+                    if let Some(client) = gh {
+                        client.search_repositories(&query).await.map_err(|e| e.to_string())
+                    } else {
+                        Err("GitHub client not available".to_string())
+                    }
+                }
+                Platform::GitLab => {
+                    if let Some(client) = gl {
+                        client.search_projects(&query).await.map_err(|e| e.to_string())
+                    } else {
+                        Err("GitLab client not available".to_string())
+                    }
+                }
+            };
+
+            let _ = tx.send(TaskResult::Search {
+                platform,
+                query,
+                result,
+            });
+        });
     }
 
-    /// Loads contents of the current repository folder into the middle column.
-    pub async fn load_current_folder(&mut self) -> Result<()> {
+    /// Triggers loading the contents of the current folder in a background tokio task.
+    pub fn trigger_load_current_folder(&mut self) {
         let (repo_name, repo_full_name, repo_id) = match self.selected_repo() {
             Some(r) => (r.name.clone(), r.full_name.clone(), r.id.clone()),
-            None => return Ok(()),
+            None => return,
         };
 
         self.is_loading = true;
@@ -246,55 +278,44 @@ impl App {
         let path = self.current_path_string();
         self.status_message = format!("Loading {}/{}: /{}...", repo_name, self.platform.name(), path);
 
-        match self.platform {
-            Platform::GitHub => {
-                if let Some(ref client) = self.github_client {
-                    let parts: Vec<&str> = repo_full_name.split('/').collect();
-                    if parts.len() == 2 {
-                        let (owner, name) = (parts[0], parts[1]);
-                        match client.get_contents(owner, name, &path).await {
-                            Ok(items) => {
-                                self.files = items;
-                                self.file_selected_index = 0;
-                                self.status_message = format!(
-                                    "Loaded {} items in /{}",
-                                    self.files.len(),
-                                    path
-                                );
-                            }
-                            Err(err) => {
-                                self.error_message = Some(format!("Failed to load contents: {}", err));
-                            }
-                        }
-                    }
-                }
-            }
-            Platform::GitLab => {
-                if let Some(ref client) = self.gitlab_client {
-                    match client.get_tree(&repo_id, &path).await {
-                        Ok(items) => {
-                            self.files = items;
-                            self.file_selected_index = 0;
-                            self.status_message = format!(
-                                "Loaded {} items in /{}",
-                                self.files.len(),
-                                path
-                            );
-                        }
-                        Err(err) => {
-                            self.error_message = Some(format!("Failed to load GitLab tree: {}", err));
-                        }
-                    }
-                }
-            }
-        }
+        let platform = self.platform;
+        let tx = self.tx.clone();
+        let gh = self.github_client.clone();
+        let gl = self.gitlab_client.clone();
+        let path_clone = path;
 
-        self.is_loading = false;
-        Ok(())
+        tokio::spawn(async move {
+            let result = match platform {
+                Platform::GitHub => {
+                    if let Some(client) = gh {
+                        let parts: Vec<&str> = repo_full_name.split('/').collect();
+                        if parts.len() == 2 {
+                            client.get_contents(parts[0], parts[1], &path_clone).await.map_err(|e| e.to_string())
+                        } else {
+                            Err("Invalid repository full name format".to_string())
+                        }
+                    } else {
+                        Err("GitHub client not available".to_string())
+                    }
+                }
+                Platform::GitLab => {
+                    if let Some(client) = gl {
+                        client.get_tree(&repo_id, &path_clone).await.map_err(|e| e.to_string())
+                    } else {
+                        Err("GitLab client not available".to_string())
+                    }
+                }
+            };
+
+            let _ = tx.send(TaskResult::FolderContents {
+                path: path_clone,
+                result,
+            });
+        });
     }
 
-    /// Loads preview content for the currently highlighted file item.
-    pub async fn load_preview(&mut self) {
+    /// Triggers loading preview content for the currently selected file.
+    pub fn trigger_load_preview(&mut self) {
         self.preview_content = None;
         self.preview_scroll = 0;
 
@@ -313,12 +334,22 @@ impl App {
         }
 
         if self.platform == Platform::GitHub {
-            if let Some(ref client) = self.github_client {
+            if let Some(client) = self.github_client.clone() {
                 let parts: Vec<&str> = repo_full_name.split('/').collect();
                 if parts.len() == 2 {
-                    if let Ok(Some(text)) = client.get_file_preview(parts[0], parts[1], &file_path).await {
-                        self.preview_content = Some(text);
-                    }
+                    let owner = parts[0].to_string();
+                    let repo = parts[1].to_string();
+                    let path = file_path;
+                    let tx = self.tx.clone();
+                    self.is_preview_loading = true;
+
+                    tokio::spawn(async move {
+                        let result = client.get_file_preview(&owner, &repo, &path).await.map_err(|e| e.to_string());
+                        let _ = tx.send(TaskResult::FilePreview {
+                            path,
+                            result,
+                        });
+                    });
                 }
             }
         }
@@ -355,7 +386,7 @@ impl App {
     }
 
     /// Triggers git clone execution in the background based on configured options.
-    pub async fn start_cloning(&mut self) {
+    pub fn trigger_start_cloning(&mut self) {
         let (repo_name, clone_url) = match self.selected_repo() {
             Some(r) => (r.name.clone(), r.clone_url.clone()),
             None => return,
@@ -377,28 +408,97 @@ impl App {
         };
 
         self.mode = AppMode::CloningInProgress;
+        self.is_loading = true;
         self.status_message = format!("Cloning {} into '{}'...", repo_name, target_dir);
 
-        match execute_clone(
-            &clone_url,
-            &target_dir,
-            &branch,
-            method,
-            sparse_path.as_deref(),
-        )
-        .await
-        {
-            Ok(output) => {
-                self.clone_output = format!("Cloning completed successfully!\n\nTarget directory: ./{}\n\n{}", target_dir, output);
-                self.clone_success = true;
-                self.mode = AppMode::CloneFinished;
-                self.status_message = "Cloning succeeded!".to_string();
+        let tx = self.tx.clone();
+        let target_dir_clone = target_dir;
+
+        tokio::spawn(async move {
+            let result = execute_clone(
+                &clone_url,
+                &target_dir_clone,
+                &branch,
+                method,
+                sparse_path.as_deref(),
+            )
+            .await
+            .map_err(|e| e.to_string());
+
+            let _ = tx.send(TaskResult::CloneFinished {
+                target_dir: target_dir_clone,
+                result,
+            });
+        });
+    }
+
+    /// Processes an incoming asynchronous background task result and updates UI state.
+    pub fn handle_task_result(&mut self, task_result: TaskResult) {
+        match task_result {
+            TaskResult::Search { platform, query, result } => {
+                if self.platform == platform && self.search_query == query {
+                    self.is_loading = false;
+                    match result {
+                        Ok(items) => {
+                            self.repos = items;
+                            self.repo_selected_index = 0;
+                            self.files.clear();
+                            self.file_selected_index = 0;
+                            self.current_path.clear();
+                            self.preview_content = None;
+                            self.status_message = format!("Found {} repositories", self.repos.len());
+                        }
+                        Err(err) => {
+                            self.error_message = Some(format!("{} search failed: {}", platform.name(), err));
+                        }
+                    }
+                }
             }
-            Err(err) => {
-                self.clone_output = format!("Cloning failed:\n\n{}", err);
-                self.clone_success = false;
+            TaskResult::FolderContents { path, result } => {
+                if self.current_path_string() == path {
+                    self.is_loading = false;
+                    match result {
+                        Ok(items) => {
+                            self.files = items;
+                            self.file_selected_index = 0;
+                            self.status_message = format!("Loaded {} items in /{}", self.files.len(), path);
+                            // If first item is a file, trigger preview
+                            self.trigger_load_preview();
+                        }
+                        Err(err) => {
+                            self.error_message = Some(format!("Failed to load contents: {}", err));
+                        }
+                    }
+                }
+            }
+            TaskResult::FilePreview { path, result } => {
+                self.is_preview_loading = false;
+                if let Some(file) = self.selected_file() {
+                    if file.path == path {
+                        if let Ok(Some(text)) = result {
+                            self.preview_content = Some(text);
+                        }
+                    }
+                }
+            }
+            TaskResult::CloneFinished { target_dir, result } => {
+                self.is_loading = false;
                 self.mode = AppMode::CloneFinished;
-                self.status_message = "Cloning failed!".to_string();
+                match result {
+                    Ok(output) => {
+                        self.clone_output = format!(
+                            "Cloning completed successfully!\n\nTarget directory: ./{}\n\n{}",
+                            target_dir, output
+                        );
+                        self.clone_success = true;
+                        self.status_message = "Cloning succeeded!".to_string();
+                    }
+                    Err(err) => {
+                        self.clone_output = format!("Cloning failed:\n\n{}", err);
+                        self.clone_success = false;
+                        self.status_message = "Cloning failed!".to_string();
+                    }
+                }
             }
         }
     }
@@ -419,6 +519,56 @@ mod tests {
         assert_eq!(app.current_path_string(), "");
         assert!(app.show_dashboard);
         assert!(!app.greeting_banner.is_empty());
+        assert_eq!(app.spinner_frame(), "⠋");
+    }
+
+    #[tokio::test]
+    async fn test_spinner_rotation() {
+        let mut app = App::default();
+        assert_eq!(app.spinner_frame(), "⠋");
+        app.is_loading = true;
+        app.tick_spinner();
+        assert_eq!(app.spinner_frame(), "⠙");
+        for _ in 0..8 {
+            app.tick_spinner();
+        }
+        assert_eq!(app.spinner_frame(), "⠏");
+        app.tick_spinner();
+        assert_eq!(app.spinner_frame(), "⠋");
+    }
+
+    #[tokio::test]
+    async fn test_handle_task_result_search() {
+        let mut app = App {
+            search_query: "ratatui".to_string(),
+            is_loading: true,
+            ..Default::default()
+        };
+
+        let mock_repos = vec![RepoItem {
+            id: "123".to_string(),
+            name: "ratatui".to_string(),
+            full_name: "ratatui-org/ratatui".to_string(),
+            description: Some("Rust library for cooking up terminal user interfaces".to_string()),
+            html_url: "https://github.com/ratatui-org/ratatui".to_string(),
+            clone_url: "https://github.com/ratatui-org/ratatui.git".to_string(),
+            default_branch: "main".to_string(),
+            stars: 10000,
+            forks: 500,
+            language: Some("Rust".to_string()),
+            platform: "GitHub".to_string(),
+        }];
+
+        app.handle_task_result(TaskResult::Search {
+            platform: Platform::GitHub,
+            query: "ratatui".to_string(),
+            result: Ok(mock_repos),
+        });
+
+        assert!(!app.is_loading);
+        assert_eq!(app.repos.len(), 1);
+        assert_eq!(app.repos[0].name, "ratatui");
+        assert!(app.status_message.contains("Found 1 repositories"));
     }
 
     #[tokio::test]

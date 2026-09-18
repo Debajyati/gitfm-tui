@@ -10,6 +10,7 @@ use octocrab::Octocrab;
 use std::sync::Arc;
 
 /// Thread-safe client for communicating with GitHub REST API via Octocrab.
+#[derive(Clone)]
 pub struct GitHubClient {
     client: Arc<Octocrab>,
 }

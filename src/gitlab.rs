@@ -115,7 +115,8 @@ impl GitLabClient {
         };
         let url = std::format!(
             "https://gitlab.com/api/v4/projects/{}/repository/tree?per_page=100{}",
-            encoded_id, path_param
+            encoded_id,
+            path_param
         );
 
         let response = self

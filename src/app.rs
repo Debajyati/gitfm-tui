@@ -6,7 +6,9 @@
 use crate::git::execute_clone;
 use crate::github::GitHubClient;
 use crate::gitlab::GitLabClient;
-use crate::types::{AppMode, CloneMethod, FileItem, FileType, FocusedPane, Platform, RepoItem};
+use crate::types::{
+    AppMode, CloneMethod, FileItem, FileType, FocusedPane, InputBuffer, Platform, RepoItem,
+};
 use anyhow::Result;
 
 /// Braille spinner animation frames (80ms per frame).
@@ -39,7 +41,7 @@ pub struct App {
     pub mode: AppMode,
     pub focused_pane: FocusedPane,
     pub search_query: String,
-    pub search_input: String,
+    pub search_input: InputBuffer,
     pub show_dashboard: bool,
     pub greeting_banner: String,
 
@@ -61,8 +63,8 @@ pub struct App {
 
     // Clone Modal fields
     pub clone_method: CloneMethod,
-    pub clone_dir_input: String,
-    pub clone_branch_input: String,
+    pub clone_dir_input: InputBuffer,
+    pub clone_branch_input: InputBuffer,
     pub clone_focused_field: usize, // 0: Method, 1: Dir, 2: Branch
     pub clone_output: String,
     pub clone_success: bool,
@@ -95,7 +97,7 @@ impl App {
             mode: AppMode::Normal,
             focused_pane: FocusedPane::RepoList,
             search_query: String::new(),
-            search_input: String::new(),
+            search_input: InputBuffer::new(),
             show_dashboard: true,
             greeting_banner: banner,
 
@@ -112,12 +114,13 @@ impl App {
             is_loading: false,
             is_preview_loading: false,
             spinner_tick: 0,
-            status_message: "Press '/' to search, 'Tab' to switch platform, '?' for help".to_string(),
+            status_message: "Press '/' to search, 'Tab' to switch platform, '?' for help"
+                .to_string(),
             error_message: None,
 
             clone_method: CloneMethod::Normal,
-            clone_dir_input: String::new(),
-            clone_branch_input: String::new(),
+            clone_dir_input: InputBuffer::new(),
+            clone_branch_input: InputBuffer::new(),
             clone_focused_field: 0,
             clone_output: String::new(),
             clone_success: false,
@@ -193,6 +196,10 @@ impl App {
     pub fn select_next_repo(&mut self) {
         if !self.repos.is_empty() && self.repo_selected_index + 1 < self.repos.len() {
             self.repo_selected_index += 1;
+            self.files.clear();
+            self.file_selected_index = 0;
+            self.current_path.clear();
+            self.preview_content = None;
         }
     }
 
@@ -200,6 +207,10 @@ impl App {
     pub fn select_prev_repo(&mut self) {
         if self.repo_selected_index > 0 {
             self.repo_selected_index -= 1;
+            self.files.clear();
+            self.file_selected_index = 0;
+            self.current_path.clear();
+            self.preview_content = None;
         }
     }
 
@@ -244,14 +255,20 @@ impl App {
             let result = match platform {
                 Platform::GitHub => {
                     if let Some(client) = gh {
-                        client.search_repositories(&query).await.map_err(|e| e.to_string())
+                        client
+                            .search_repositories(&query)
+                            .await
+                            .map_err(|e| e.to_string())
                     } else {
                         Err("GitHub client not available".to_string())
                     }
                 }
                 Platform::GitLab => {
                     if let Some(client) = gl {
-                        client.search_projects(&query).await.map_err(|e| e.to_string())
+                        client
+                            .search_projects(&query)
+                            .await
+                            .map_err(|e| e.to_string())
                     } else {
                         Err("GitLab client not available".to_string())
                     }
@@ -276,7 +293,12 @@ impl App {
         self.is_loading = true;
         self.error_message = None;
         let path = self.current_path_string();
-        self.status_message = format!("Loading {}/{}: /{}...", repo_name, self.platform.name(), path);
+        self.status_message = format!(
+            "Loading {}/{}: /{}...",
+            repo_name,
+            self.platform.name(),
+            path
+        );
 
         let platform = self.platform;
         let tx = self.tx.clone();
@@ -290,7 +312,10 @@ impl App {
                     if let Some(client) = gh {
                         let parts: Vec<&str> = repo_full_name.split('/').collect();
                         if parts.len() == 2 {
-                            client.get_contents(parts[0], parts[1], &path_clone).await.map_err(|e| e.to_string())
+                            client
+                                .get_contents(parts[0], parts[1], &path_clone)
+                                .await
+                                .map_err(|e| e.to_string())
                         } else {
                             Err("Invalid repository full name format".to_string())
                         }
@@ -300,7 +325,10 @@ impl App {
                 }
                 Platform::GitLab => {
                     if let Some(client) = gl {
-                        client.get_tree(&repo_id, &path_clone).await.map_err(|e| e.to_string())
+                        client
+                            .get_tree(&repo_id, &path_clone)
+                            .await
+                            .map_err(|e| e.to_string())
                     } else {
                         Err("GitLab client not available".to_string())
                     }
@@ -344,11 +372,11 @@ impl App {
                     self.is_preview_loading = true;
 
                     tokio::spawn(async move {
-                        let result = client.get_file_preview(&owner, &repo, &path).await.map_err(|e| e.to_string());
-                        let _ = tx.send(TaskResult::FilePreview {
-                            path,
-                            result,
-                        });
+                        let result = client
+                            .get_file_preview(&owner, &repo, &path)
+                            .await
+                            .map_err(|e| e.to_string());
+                        let _ = tx.send(TaskResult::FilePreview { path, result });
                     });
                 }
             }
@@ -377,8 +405,8 @@ impl App {
         }
 
         self.clone_method = default_method;
-        self.clone_dir_input = target_dir;
-        self.clone_branch_input = default_branch;
+        self.clone_dir_input.set(target_dir);
+        self.clone_branch_input.set(default_branch);
         self.clone_focused_field = 0;
         self.clone_output.clear();
         self.clone_success = false;
@@ -392,13 +420,13 @@ impl App {
             None => return,
         };
 
-        let target_dir = self.clone_dir_input.trim().to_string();
+        let target_dir = self.clone_dir_input.value().trim().to_string();
         if target_dir.is_empty() {
             self.error_message = Some("Target directory cannot be empty".to_string());
             return;
         }
 
-        let branch = self.clone_branch_input.trim().to_string();
+        let branch = self.clone_branch_input.value().trim().to_string();
         let method = self.clone_method;
 
         let sparse_path = if method == CloneMethod::Sparse {
@@ -435,7 +463,11 @@ impl App {
     /// Processes an incoming asynchronous background task result and updates UI state.
     pub fn handle_task_result(&mut self, task_result: TaskResult) {
         match task_result {
-            TaskResult::Search { platform, query, result } => {
+            TaskResult::Search {
+                platform,
+                query,
+                result,
+            } => {
                 if self.platform == platform && self.search_query == query {
                     self.is_loading = false;
                     match result {
@@ -446,10 +478,12 @@ impl App {
                             self.file_selected_index = 0;
                             self.current_path.clear();
                             self.preview_content = None;
-                            self.status_message = format!("Found {} repositories", self.repos.len());
+                            self.status_message =
+                                format!("Found {} repositories", self.repos.len());
                         }
                         Err(err) => {
-                            self.error_message = Some(format!("{} search failed: {}", platform.name(), err));
+                            self.error_message =
+                                Some(format!("{} search failed: {}", platform.name(), err));
                         }
                     }
                 }
@@ -461,7 +495,8 @@ impl App {
                         Ok(items) => {
                             self.files = items;
                             self.file_selected_index = 0;
-                            self.status_message = format!("Loaded {} items in /{}", self.files.len(), path);
+                            self.status_message =
+                                format!("Loaded {} items in /{}", self.files.len(), path);
                             // If first item is a file, trigger preview
                             self.trigger_load_preview();
                         }
@@ -500,6 +535,24 @@ impl App {
                     }
                 }
             }
+        }
+    }
+
+    /// Opens the currently selected repository in the default web browser.
+    pub fn open_selected_repo_in_browser(&mut self) {
+        if let Some(repo) = self.selected_repo() {
+            let url = &repo.html_url;
+            match webbrowser::open(url) {
+                Ok(_) => {
+                    self.status_message = format!("Opened {} in browser", url);
+                    self.error_message = None;
+                }
+                Err(e) => {
+                    self.error_message = Some(format!("Failed to open browser: {}", e));
+                }
+            }
+        } else {
+            self.error_message = Some("No repository selected to open in browser".to_string());
         }
     }
 }
@@ -590,7 +643,10 @@ mod tests {
 
         // Case 2: Deep in path -> returns current path string
         app.current_path.push("packages".to_string());
-        assert_eq!(app.current_selected_directory(), Some("packages".to_string()));
+        assert_eq!(
+            app.current_selected_directory(),
+            Some("packages".to_string())
+        );
 
         // Case 3: Highlighting a directory file item -> returns directory path
         app.files.push(FileItem {
@@ -601,7 +657,10 @@ mod tests {
             sha: None,
             download_url: None,
         });
-        assert_eq!(app.current_selected_directory(), Some("packages/core".to_string()));
+        assert_eq!(
+            app.current_selected_directory(),
+            Some("packages/core".to_string())
+        );
     }
 
     #[tokio::test]

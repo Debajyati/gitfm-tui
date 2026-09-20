@@ -66,22 +66,19 @@ impl GitHubClient {
     }
 
     /// Fetches files and folders in a repository at the specified directory path.
-    pub async fn get_contents(
-        &self,
-        owner: &str,
-        repo: &str,
-        path: &str,
-    ) -> Result<Vec<FileItem>> {
+    pub async fn get_contents(&self, owner: &str, repo: &str, path: &str) -> Result<Vec<FileItem>> {
         let repos_handler = self.client.repos(owner, repo);
         let mut handler = repos_handler.get_content();
         if !path.is_empty() {
             handler = handler.path(path);
         }
 
-        let content_items = handler
-            .send()
-            .await
-            .with_context(|| format!("Failed to get contents for {}/{} at '{}'", owner, repo, path))?;
+        let content_items = handler.send().await.with_context(|| {
+            format!(
+                "Failed to get contents for {}/{} at '{}'",
+                owner, repo, path
+            )
+        })?;
 
         let mut items = Vec::with_capacity(content_items.items.len());
         for item in content_items.items {

@@ -96,7 +96,12 @@ pub async fn execute_clone(
             clone_cmd.args(["clone", "--no-checkout", "--filter=blob:none"]);
             clone_cmd.arg(repo_url).arg(target_dir);
 
-            run_git_command(clone_cmd, "initial clone for sparse checkout", &mut log_output).await?;
+            run_git_command(
+                clone_cmd,
+                "initial clone for sparse checkout",
+                &mut log_output,
+            )
+            .await?;
 
             let repo_path = Path::new(target_dir);
 
@@ -117,18 +122,19 @@ pub async fn execute_clone(
             run_git_command(add_cmd, "sparse-checkout add directory", &mut log_output).await?;
 
             // Step 4: Checkout target branch (or HEAD/main)
-            let target_branch = if !branch.is_empty() {
-                branch
-            } else {
-                "HEAD"
-            };
+            let target_branch = if !branch.is_empty() { branch } else { "HEAD" };
 
             let mut checkout_cmd = Command::new("git");
             checkout_cmd
                 .current_dir(repo_path)
                 .args(["checkout", target_branch]);
 
-            run_git_command(checkout_cmd, "sparse-checkout branch checkout", &mut log_output).await?;
+            run_git_command(
+                checkout_cmd,
+                "sparse-checkout branch checkout",
+                &mut log_output,
+            )
+            .await?;
         }
     }
 

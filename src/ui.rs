@@ -9,9 +9,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{
-        Block, BorderType, Borders, Clear, List, ListItem, Paragraph, Tabs, Wrap,
-    },
+    widgets::{Block, BorderType, Borders, Clear, List, ListItem, Paragraph, Tabs, Wrap},
     Frame,
 };
 
@@ -48,7 +46,11 @@ pub fn draw(f: &mut Frame, app: &App) {
 fn draw_header(f: &mut Frame, app: &App, area: Rect) {
     let header_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(18), Constraint::Min(20), Constraint::Length(25)])
+        .constraints([
+            Constraint::Length(18),
+            Constraint::Min(20),
+            Constraint::Length(25),
+        ])
         .split(area);
 
     // App Title
@@ -57,8 +59,18 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         .border_style(Style::default().fg(Color::Cyan))
         .border_type(BorderType::Rounded);
     let title_p = Paragraph::new(Line::from(vec![
-        Span::styled("🚀 gitFM ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-        Span::styled("TUI", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "🚀 gitFM ",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            "TUI",
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
     ]))
     .alignment(Alignment::Center)
     .block(title_block);
@@ -68,11 +80,29 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
     let titles = vec![
         Line::from(vec![
             Span::raw("1 "),
-            Span::styled("GitHub", if app.platform == Platform::GitHub { Style::default().fg(Color::Green).add_modifier(Modifier::BOLD) } else { Style::default() }),
+            Span::styled(
+                "GitHub",
+                if app.platform == Platform::GitHub {
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                },
+            ),
         ]),
         Line::from(vec![
             Span::raw("2 "),
-            Span::styled("GitLab", if app.platform == Platform::GitLab { Style::default().fg(Color::LightRed).add_modifier(Modifier::BOLD) } else { Style::default() }),
+            Span::styled(
+                "GitLab",
+                if app.platform == Platform::GitLab {
+                    Style::default()
+                        .fg(Color::LightRed)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                },
+            ),
         ]),
     ];
 
@@ -101,7 +131,9 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
     let auth_text = if app.is_loading {
         Span::styled(
             format!("{} Working...", app.spinner_frame()),
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
         )
     } else {
         match app.platform {
@@ -154,7 +186,11 @@ fn draw_miller_columns(f: &mut Frame, app: &App, area: Rect) {
 
 fn draw_repo_column(f: &mut Frame, app: &App, area: Rect) {
     let is_focused = app.focused_pane == FocusedPane::RepoList;
-    let border_color = if is_focused { Color::Green } else { Color::DarkGray };
+    let border_color = if is_focused {
+        Color::Green
+    } else {
+        Color::DarkGray
+    };
 
     if app.is_loading && app.repos.is_empty() {
         let loading_lines = vec![
@@ -163,20 +199,31 @@ fn draw_repo_column(f: &mut Frame, app: &App, area: Rect) {
             Line::from(vec![
                 Span::styled(
                     format!(" {} ", app.spinner_frame()),
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     "Searching...",
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]),
             Line::from(""),
             Line::from(Span::styled(
-                format!("Querying {} API for '{}'...", app.platform.name(), &app.search_query),
+                format!(
+                    "Querying {} API for '{}'...",
+                    app.platform.name(),
+                    &app.search_query
+                ),
                 Style::default().fg(Color::DarkGray),
             )),
             Line::from(""),
-            Line::from(Span::styled("Please wait...", Style::default().fg(Color::DarkGray))),
+            Line::from(Span::styled(
+                "Please wait...",
+                Style::default().fg(Color::DarkGray),
+            )),
         ];
         let p = Paragraph::new(loading_lines)
             .alignment(Alignment::Center)
@@ -184,7 +231,11 @@ fn draw_repo_column(f: &mut Frame, app: &App, area: Rect) {
                 Block::default()
                     .borders(Borders::ALL)
                     .title(format!(" Repositories {} ", app.spinner_frame()))
-                    .border_type(if is_focused { BorderType::Thick } else { BorderType::Rounded })
+                    .border_type(if is_focused {
+                        BorderType::Thick
+                    } else {
+                        BorderType::Rounded
+                    })
                     .border_style(Style::default().fg(border_color)),
             );
         f.render_widget(p, area);
@@ -238,31 +289,46 @@ fn draw_repo_column(f: &mut Frame, app: &App, area: Rect) {
             " Repositories ({}) {} [{}] ",
             app.repos.len(),
             app.spinner_frame(),
-            if app.search_query.is_empty() { "none" } else { &app.search_query }
+            if app.search_query.is_empty() {
+                "none"
+            } else {
+                &app.search_query
+            }
         )
     } else {
         format!(
             " Repositories ({}) [{}] ",
             app.repos.len(),
-            if app.search_query.is_empty() { "none" } else { &app.search_query }
+            if app.search_query.is_empty() {
+                "none"
+            } else {
+                &app.search_query
+            }
         )
     };
 
-    let list = List::new(items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(title)
-                .border_type(if is_focused { BorderType::Thick } else { BorderType::Rounded })
-                .border_style(Style::default().fg(border_color)),
-        );
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .border_type(if is_focused {
+                BorderType::Thick
+            } else {
+                BorderType::Rounded
+            })
+            .border_style(Style::default().fg(border_color)),
+    );
 
     f.render_widget(list, area);
 }
 
 fn draw_file_column(f: &mut Frame, app: &App, area: Rect) {
     let is_focused = app.focused_pane == FocusedPane::FileList;
-    let border_color = if is_focused { Color::Green } else { Color::DarkGray };
+    let border_color = if is_focused {
+        Color::Green
+    } else {
+        Color::DarkGray
+    };
 
     let path_display = if app.current_path.is_empty() {
         "/ (root)".to_string()
@@ -277,11 +343,15 @@ fn draw_file_column(f: &mut Frame, app: &App, area: Rect) {
             Line::from(vec![
                 Span::styled(
                     format!(" {} ", app.spinner_frame()),
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     "Loading contents...",
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]),
             Line::from(""),
@@ -296,9 +366,110 @@ fn draw_file_column(f: &mut Frame, app: &App, area: Rect) {
                 Block::default()
                     .borders(Borders::ALL)
                     .title(format!(" Files {} ", app.spinner_frame()))
-                    .border_type(if is_focused { BorderType::Thick } else { BorderType::Rounded })
+                    .border_type(if is_focused {
+                        BorderType::Thick
+                    } else {
+                        BorderType::Rounded
+                    })
                     .border_style(Style::default().fg(border_color)),
             );
+        f.render_widget(p, area);
+        return;
+    }
+
+    if app.files.is_empty() {
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(" Files ")
+            .border_type(if is_focused {
+                BorderType::Thick
+            } else {
+                BorderType::Rounded
+            })
+            .border_style(Style::default().fg(border_color));
+
+        let message_lines = if app.focused_pane == FocusedPane::RepoList {
+            vec![
+                Line::from(""),
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("📁 ", Style::default().fg(Color::Cyan)),
+                    Span::styled(
+                        "Repository Filesystem",
+                        Style::default()
+                            .fg(Color::White)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                ]),
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("Press ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        "'l'",
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(" or ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        "Enter",
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        " to view repository filesystem",
+                        Style::default().fg(Color::Gray),
+                    ),
+                ]),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "Explore folders, inspect files, and preview code",
+                    Style::default().fg(Color::DarkGray),
+                )),
+            ]
+        } else {
+            vec![
+                Line::from(""),
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("📂 ", Style::default().fg(Color::Yellow)),
+                    Span::styled(
+                        "Empty Directory",
+                        Style::default()
+                            .fg(Color::White)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                ]),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "This directory contains no files.",
+                    Style::default().fg(Color::DarkGray),
+                )),
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("Press ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        "'h'",
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(" or ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        "Left",
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(" to go back", Style::default().fg(Color::Gray)),
+                ]),
+            ]
+        };
+
+        let p = Paragraph::new(message_lines)
+            .alignment(Alignment::Center)
+            .block(block);
         f.render_widget(p, area);
         return;
     }
@@ -330,14 +501,15 @@ fn draw_file_column(f: &mut Frame, app: &App, area: Rect) {
                 Span::styled(
                     &file.name,
                     if is_selected {
-                        Style::default()
-                            .fg(name_color)
-                            .add_modifier(Modifier::BOLD)
+                        Style::default().fg(name_color).add_modifier(Modifier::BOLD)
                     } else {
                         Style::default().fg(name_color)
                     },
                 ),
-                Span::styled(format!(" {}", size_str), Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    format!(" {}", size_str),
+                    Style::default().fg(Color::DarkGray),
+                ),
             ]);
 
             let item_style = if is_selected {
@@ -351,31 +523,47 @@ fn draw_file_column(f: &mut Frame, app: &App, area: Rect) {
         .collect();
 
     let title = if app.is_loading {
-        format!(" Files: {} {} ({}) ", path_display, app.spinner_frame(), app.files.len())
+        format!(
+            " Files: {} {} ({}) ",
+            path_display,
+            app.spinner_frame(),
+            app.files.len()
+        )
     } else {
         format!(" Files: {} ({}) ", path_display, app.files.len())
     };
 
-    let list = List::new(items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(title)
-                .border_type(if is_focused { BorderType::Thick } else { BorderType::Rounded })
-                .border_style(Style::default().fg(border_color)),
-        );
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .border_type(if is_focused {
+                BorderType::Thick
+            } else {
+                BorderType::Rounded
+            })
+            .border_style(Style::default().fg(border_color)),
+    );
 
     f.render_widget(list, area);
 }
 
 fn draw_preview_column(f: &mut Frame, app: &App, area: Rect) {
     let is_focused = app.focused_pane == FocusedPane::Preview;
-    let border_color = if is_focused { Color::Green } else { Color::DarkGray };
+    let border_color = if is_focused {
+        Color::Green
+    } else {
+        Color::DarkGray
+    };
 
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" Preview / Details ")
-        .border_type(if is_focused { BorderType::Thick } else { BorderType::Rounded })
+        .border_type(if is_focused {
+            BorderType::Thick
+        } else {
+            BorderType::Rounded
+        })
         .border_style(Style::default().fg(border_color));
 
     if app.is_preview_loading {
@@ -385,11 +573,15 @@ fn draw_preview_column(f: &mut Frame, app: &App, area: Rect) {
             Line::from(vec![
                 Span::styled(
                     format!(" {} ", app.spinner_frame()),
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     "Loading file preview...",
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]),
             Line::from(""),
@@ -424,7 +616,12 @@ fn draw_preview_column(f: &mut Frame, app: &App, area: Rect) {
         if file.file_type == FileType::Directory {
             let info = vec![
                 Line::from(vec![
-                    Span::styled("Folder: ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        "Folder: ",
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
+                    ),
                     Span::styled(&file.path, Style::default().fg(Color::White)),
                 ]),
                 Line::from(""),
@@ -446,13 +643,26 @@ fn draw_preview_column(f: &mut Frame, app: &App, area: Rect) {
 
     if let Some(repo) = app.selected_repo() {
         // Repository Overview Preview
-        let desc = repo.description.as_deref().unwrap_or("No description provided.");
+        let desc = repo
+            .description
+            .as_deref()
+            .unwrap_or("No description provided.");
         let lang = repo.language.as_deref().unwrap_or("Unknown");
 
         let lines = vec![
             Line::from(vec![
-                Span::styled("Repo: ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-                Span::styled(&repo.full_name, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Repo: ",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    &repo.full_name,
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ]),
             Line::from(""),
             Line::from(vec![
@@ -468,7 +678,10 @@ fn draw_preview_column(f: &mut Frame, app: &App, area: Rect) {
             ]),
             Line::from(vec![
                 Span::styled("Default Branch: ", Style::default().fg(Color::Magenta)),
-                Span::styled(&repo.default_branch, Style::default().fg(Color::LightMagenta)),
+                Span::styled(
+                    &repo.default_branch,
+                    Style::default().fg(Color::LightMagenta),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("Language: ", Style::default().fg(Color::Blue)),
@@ -480,17 +693,23 @@ fn draw_preview_column(f: &mut Frame, app: &App, area: Rect) {
                 Span::styled(&repo.clone_url, Style::default().fg(Color::DarkGray)),
             ]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("▶ Press 'l' or 'Enter' to explore repository files", Style::default().fg(Color::Green)),
-            ]),
-            Line::from(vec![
-                Span::styled("▶ Press 'c' to open Clone Dialog", Style::default().fg(Color::Yellow)),
-            ]),
+            Line::from(vec![Span::styled(
+                "▶ Press 'o' to open repository in browser",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(vec![Span::styled(
+                "▶ Press 'c' to open Clone Dialog",
+                Style::default().fg(Color::Yellow),
+            )]),
+            Line::from(vec![Span::styled(
+                "▶ Press 'l' or 'Enter' to explore repository files",
+                Style::default().fg(Color::Green),
+            )]),
         ];
 
-        let p = Paragraph::new(lines)
-            .block(block)
-            .wrap(Wrap { trim: true });
+        let p = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
         f.render_widget(p, area);
     } else {
         let p = Paragraph::new("No repository selected. Press '/' to search.")
@@ -520,9 +739,8 @@ fn draw_dashboard(f: &mut Frame, app: &App, area: Rect) {
 
     // Top vertical padding for a well-centered aesthetic layout
     let estimated_content_lines = banner_raw_lines.len() + 11;
-    let top_padding = (area.height.saturating_sub(2) as usize)
-        .saturating_sub(estimated_content_lines)
-        / 2;
+    let top_padding =
+        (area.height.saturating_sub(2) as usize).saturating_sub(estimated_content_lines) / 2;
 
     for _ in 0..top_padding.min(3) {
         lines.push(Line::from(""));
@@ -535,7 +753,9 @@ fn draw_dashboard(f: &mut Frame, app: &App, area: Rect) {
         let padded_line = format!("{}{}", line, trailing_padding);
         lines.push(Line::from(Span::styled(
             padded_line,
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
         )));
     }
 
@@ -545,20 +765,22 @@ fn draw_dashboard(f: &mut Frame, app: &App, area: Rect) {
     lines.push(Line::from(vec![
         Span::styled(
             "👋 Welcome to gitFM TUI! ",
-            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
             "Thank you for using gitFM.",
-            Style::default().fg(Color::LightGreen).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::LightGreen)
+                .add_modifier(Modifier::BOLD),
         ),
     ]));
 
-    lines.push(Line::from(vec![
-        Span::styled(
-            "Interactive GitHub & GitLab terminal file manager with high-performance clone workflows.",
-            Style::default().fg(Color::DarkGray),
-        ),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        "Interactive GitHub & GitLab terminal file manager with high-performance clone workflows.",
+        Style::default().fg(Color::DarkGray),
+    )]));
 
     lines.push(Line::from(""));
 
@@ -577,9 +799,12 @@ fn draw_dashboard(f: &mut Frame, app: &App, area: Rect) {
         ),
     ]));
 
-    lines.push(Line::from(vec![
-        Span::styled("💖 Or sponsor me", Style::default().fg(Color::LightRed).add_modifier(Modifier::BOLD)),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        "💖 Or sponsor me",
+        Style::default()
+            .fg(Color::LightRed)
+            .add_modifier(Modifier::BOLD),
+    )]));
 
     lines.push(Line::from(""));
 
@@ -590,17 +815,47 @@ fn draw_dashboard(f: &mut Frame, app: &App, area: Rect) {
     )));
 
     lines.push(Line::from(vec![
-        Span::styled("  [ / ]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "  [ / ]",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled(" or ", Style::default().fg(Color::DarkGray)),
-        Span::styled("[ s ]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "[ s ]",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" Search Repositories      "),
-        Span::styled("[ Tab ]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "[ Tab ]",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(format!(" Switch Platform ({})      ", app.platform.name())),
-        Span::styled("[ r ]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "[ r ]",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" Cycle ASCII Font      "),
-        Span::styled("[ ? ]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "[ ? ]",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" Help      "),
-        Span::styled("[ q ]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "[ q ]",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" Quit"),
     ]));
 
@@ -647,6 +902,8 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
             Span::raw(" Nav  "),
             Span::styled("c", Style::default().fg(Color::Yellow)),
             Span::raw(" Clone  "),
+            Span::styled("o", Style::default().fg(Color::Yellow)),
+            Span::raw(" Open Browser  "),
             Span::styled("d", Style::default().fg(Color::Yellow)),
             Span::raw(" Dashboard  "),
             Span::styled("r", Style::default().fg(Color::Yellow)),
@@ -658,8 +915,7 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
         ])
     };
 
-    let footer = Paragraph::new(key_hints)
-        .style(Style::default().bg(Color::Rgb(20, 20, 25)));
+    let footer = Paragraph::new(key_hints).style(Style::default().bg(Color::Rgb(20, 20, 25)));
     f.render_widget(footer, area);
 }
 
@@ -690,13 +946,40 @@ fn draw_search_modal(f: &mut Frame, app: &App) {
         .title(" Query ")
         .border_style(Style::default().fg(Color::Green));
 
-    let input_p = Paragraph::new(app.search_input.clone())
-        .style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD))
+    let inner_width = chunks[0].width.saturating_sub(2) as usize;
+    let cursor = app.search_input.cursor();
+    let scroll = if cursor >= inner_width && inner_width > 0 {
+        cursor - inner_width + 1
+    } else {
+        0
+    };
+    let visible_text: String = app
+        .search_input
+        .value()
+        .chars()
+        .skip(scroll)
+        .take(inner_width)
+        .collect();
+
+    let input_p = Paragraph::new(visible_text)
+        .style(
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        )
         .block(input_block);
     f.render_widget(input_p, chunks[0]);
 
+    if inner_width > 0 {
+        let cursor_x = chunks[0].x + 1 + (cursor - scroll) as u16;
+        let cursor_y = chunks[0].y + 1;
+        f.set_cursor_position((cursor_x, cursor_y));
+    }
+
     let help_text = vec![
-        Line::from("Press [Enter] to Search  •  [Esc] to Cancel"),
+        Line::from(
+            "Press [Enter] to Search  •  [Esc] to Cancel  •  [Left/Right/Home/End] Move Cursor",
+        ),
         Line::from(vec![
             Span::styled("Tip: ", Style::default().fg(Color::Yellow)),
             Span::raw("Search by keyword, topic, or username (e.g. 'ratatui' or 'user:facebook')."),
@@ -742,7 +1025,14 @@ fn draw_clone_modal(f: &mut Frame, app: &App) {
             let is_selected = *m == app.clone_method;
             let marker = if is_selected { "● " } else { "○ " };
             let line = Line::from(vec![
-                Span::styled(marker, if is_selected { Style::default().fg(Color::Green) } else { Style::default().fg(Color::DarkGray) }),
+                Span::styled(
+                    marker,
+                    if is_selected {
+                        Style::default().fg(Color::Green)
+                    } else {
+                        Style::default().fg(Color::DarkGray)
+                    },
+                ),
                 Span::styled(
                     m.name(),
                     if is_selected {
@@ -758,7 +1048,11 @@ fn draw_clone_modal(f: &mut Frame, app: &App) {
         })
         .collect();
 
-    let method_border_color = if app.clone_focused_field == 0 { Color::Green } else { Color::DarkGray };
+    let method_border_color = if app.clone_focused_field == 0 {
+        Color::Green
+    } else {
+        Color::DarkGray
+    };
     let method_list = List::new(method_items).block(
         Block::default()
             .borders(Borders::ALL)
@@ -768,8 +1062,27 @@ fn draw_clone_modal(f: &mut Frame, app: &App) {
     f.render_widget(method_list, rows[0]);
 
     // 2. Target Directory Input
-    let dir_border_color = if app.clone_focused_field == 1 { Color::Green } else { Color::DarkGray };
-    let dir_input = Paragraph::new(app.clone_dir_input.clone()).block(
+    let dir_border_color = if app.clone_focused_field == 1 {
+        Color::Green
+    } else {
+        Color::DarkGray
+    };
+    let dir_inner_width = rows[1].width.saturating_sub(2) as usize;
+    let dir_cursor = app.clone_dir_input.cursor();
+    let dir_scroll = if dir_cursor >= dir_inner_width && dir_inner_width > 0 {
+        dir_cursor - dir_inner_width + 1
+    } else {
+        0
+    };
+    let dir_visible: String = app
+        .clone_dir_input
+        .value()
+        .chars()
+        .skip(dir_scroll)
+        .take(dir_inner_width)
+        .collect();
+
+    let dir_input = Paragraph::new(dir_visible).block(
         Block::default()
             .borders(Borders::ALL)
             .title(" [2] Target Local Directory ")
@@ -778,14 +1091,44 @@ fn draw_clone_modal(f: &mut Frame, app: &App) {
     f.render_widget(dir_input, rows[1]);
 
     // 3. Branch Input
-    let branch_border_color = if app.clone_focused_field == 2 { Color::Green } else { Color::DarkGray };
-    let branch_input = Paragraph::new(app.clone_branch_input.clone()).block(
+    let branch_border_color = if app.clone_focused_field == 2 {
+        Color::Green
+    } else {
+        Color::DarkGray
+    };
+    let branch_inner_width = rows[2].width.saturating_sub(2) as usize;
+    let branch_cursor = app.clone_branch_input.cursor();
+    let branch_scroll = if branch_cursor >= branch_inner_width && branch_inner_width > 0 {
+        branch_cursor - branch_inner_width + 1
+    } else {
+        0
+    };
+    let branch_visible: String = app
+        .clone_branch_input
+        .value()
+        .chars()
+        .skip(branch_scroll)
+        .take(branch_inner_width)
+        .collect();
+
+    let branch_input = Paragraph::new(branch_visible).block(
         Block::default()
             .borders(Borders::ALL)
             .title(" [3] Branch (Leave blank for default) ")
             .border_style(Style::default().fg(branch_border_color)),
     );
     f.render_widget(branch_input, rows[2]);
+
+    // Render cursor for active clone input field
+    if app.clone_focused_field == 1 && dir_inner_width > 0 {
+        let cursor_x = rows[1].x + 1 + (dir_cursor - dir_scroll) as u16;
+        let cursor_y = rows[1].y + 1;
+        f.set_cursor_position((cursor_x, cursor_y));
+    } else if app.clone_focused_field == 2 && branch_inner_width > 0 {
+        let cursor_x = rows[2].x + 1 + (branch_cursor - branch_scroll) as u16;
+        let cursor_y = rows[2].y + 1;
+        f.set_cursor_position((cursor_x, cursor_y));
+    }
 
     // 4. Method description and instructions
     let desc = app.clone_method.description();
@@ -796,9 +1139,14 @@ fn draw_clone_modal(f: &mut Frame, app: &App) {
         ]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("[Tab] ", Style::default().fg(Color::Cyan)),
-            Span::raw("Next Field  •  "),
-            Span::styled("[Enter] ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("[Tab] / [Up/Down] ", Style::default().fg(Color::Cyan)),
+            Span::raw("Switch Field  •  "),
+            Span::styled(
+                "[Enter] ",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw("START CLONING  •  "),
             Span::styled("[Esc] ", Style::default().fg(Color::Red)),
             Span::raw("Cancel"),
@@ -826,20 +1174,36 @@ fn draw_cloning_progress_modal(f: &mut Frame, app: &App) {
         Line::from(vec![
             Span::styled(
                 format!(" {} ", app.spinner_frame()),
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 "Executing Git Clone...",
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(""),
-        Line::from(Span::styled(format!("Target: ./{}", app.clone_dir_input), Style::default().fg(Color::White))),
-        Line::from(Span::styled(format!("Method: {}", app.clone_method.name()), Style::default().fg(Color::Yellow))),
+        Line::from(Span::styled(
+            format!("Target: ./{}", app.clone_dir_input),
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            format!("Method: {}", app.clone_method.name()),
+            Style::default().fg(Color::Yellow),
+        )),
         Line::from(""),
-        Line::from(Span::styled(&app.status_message, Style::default().fg(Color::LightCyan))),
+        Line::from(Span::styled(
+            &app.status_message,
+            Style::default().fg(Color::LightCyan),
+        )),
         Line::from(""),
-        Line::from(Span::styled("Transferring objects over the network. Please wait...", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled(
+            "Transferring objects over the network. Please wait...",
+            Style::default().fg(Color::DarkGray),
+        )),
     ])
     .alignment(Alignment::Center)
     .block(block);
@@ -874,16 +1238,28 @@ fn draw_clone_finished_modal(f: &mut Frame, app: &App) {
     let output_lines: Vec<Line> = app
         .clone_output
         .lines()
-        .map(|l| Line::from(Span::styled(l, Style::default().fg(if app.clone_success { Color::LightGreen } else { Color::LightRed }))))
+        .map(|l| {
+            Line::from(Span::styled(
+                l,
+                Style::default().fg(if app.clone_success {
+                    Color::LightGreen
+                } else {
+                    Color::LightRed
+                }),
+            ))
+        })
         .collect();
 
-    let output_p = Paragraph::new(output_lines)
-        .wrap(Wrap { trim: false });
+    let output_p = Paragraph::new(output_lines).wrap(Wrap { trim: false });
     f.render_widget(output_p, chunks[0]);
 
     let dismiss = Paragraph::new("Press [Enter] or [Esc] to return to File Manager")
         .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD));
+        .style(
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        );
     f.render_widget(dismiss, chunks[1]);
 }
 
@@ -898,15 +1274,26 @@ fn draw_help_modal(f: &mut Frame) {
         .border_style(Style::default().fg(Color::Cyan));
 
     let content = vec![
-        Line::from(Span::styled("Navigation (Yazi / Vim-style):", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            "Navigation (Yazi / Vim-style):",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
         Line::from("  j / Down       : Move selection down"),
         Line::from("  k / Up         : Move selection up"),
         Line::from("  l / Right      : Enter folder / open directory in Miller column"),
         Line::from("  h / Left       : Go up to parent directory / back to repo list"),
         Line::from("  Enter          : Open folder or view file preview"),
         Line::from(""),
-        Line::from(Span::styled("Cloning & Actions:", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            "Cloning & Actions:",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
         Line::from("  c              : Open Clone Dialog (supports Sparse for current folder!)"),
+        Line::from("  o              : Open selected repository in default web browser"),
         Line::from("  / or s         : Search GitHub or GitLab repositories"),
         Line::from("  Tab            : Toggle between GitHub and GitLab platforms"),
         Line::from("  d              : Return to Home Dashboard"),
@@ -914,7 +1301,12 @@ fn draw_help_modal(f: &mut Frame) {
         Line::from("  ?              : Toggle this help menu"),
         Line::from("  q / Esc        : Back / Close modal / Quit application"),
         Line::from(""),
-        Line::from(Span::styled("Cloning Methods:", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            "Cloning Methods:",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
         Line::from("  • Normal       : Standard full git clone"),
         Line::from("  • Shallow      : --depth 1 (only latest commit)"),
         Line::from("  • Blobless     : --filter=blob:none (blobs fetched on-demand)"),
@@ -980,7 +1372,7 @@ mod tests {
         let popup = centered_rect(60, 40, parent);
         assert_eq!(popup.width, 60);
         assert_eq!(popup.height, 20); // 40% of 50 is 20
-        assert_eq!(popup.x, 20);      // (100 - 60) / 2 = 20
-        assert_eq!(popup.y, 15);      // (50 - 20) / 2 = 15
+        assert_eq!(popup.x, 20); // (100 - 60) / 2 = 20
+        assert_eq!(popup.y, 15); // (50 - 20) / 2 = 15
     }
 }

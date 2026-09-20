@@ -118,6 +118,9 @@ async fn run_app(
                                         app.prepare_clone_modal();
                                     }
                                 }
+                                KeyCode::Char('o') => {
+                                    app.open_selected_repo_in_browser();
+                                }
                                 KeyCode::Char('r') => {
                                     if app.focused_pane == FocusedPane::RepoList {
                                         app.trigger_search();
@@ -198,11 +201,15 @@ async fn run_app(
 
                     AppMode::SearchInput => match key.code {
                         KeyCode::Enter => {
-                            let q = app.search_input.trim().to_string();
-                            if !q.is_empty() {
-                                app.search_query = q;
-                                app.mode = AppMode::Normal;
-                                app.trigger_search();
+                            if !app.search_input.is_empty() {
+                                let q = app.search_input.value().trim().to_string();
+                                if !q.is_empty() {
+                                    app.search_query = q;
+                                    app.mode = AppMode::Normal;
+                                    app.trigger_search();
+                                } else {
+                                    app.mode = AppMode::Normal;
+                                }
                             } else {
                                 app.mode = AppMode::Normal;
                             }
@@ -210,11 +217,35 @@ async fn run_app(
                         KeyCode::Esc => {
                             app.mode = AppMode::Normal;
                         }
+                        KeyCode::Left => {
+                            app.search_input.move_left();
+                        }
+                        KeyCode::Right => {
+                            app.search_input.move_right();
+                        }
+                        KeyCode::Home => {
+                            app.search_input.move_home();
+                        }
+                        KeyCode::End => {
+                            app.search_input.move_end();
+                        }
                         KeyCode::Backspace => {
-                            app.search_input.pop();
+                            app.search_input.backspace();
+                        }
+                        KeyCode::Delete => {
+                            app.search_input.delete();
+                        }
+                        KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            app.search_input.move_home();
+                        }
+                        KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            app.search_input.move_end();
+                        }
+                        KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            app.search_input.clear();
                         }
                         KeyCode::Char(c) => {
-                            app.search_input.push(c);
+                            app.search_input.insert_char(c);
                         }
                         _ => {}
                     },
@@ -226,9 +257,17 @@ async fn run_app(
                         KeyCode::Tab => {
                             app.clone_focused_field = (app.clone_focused_field + 1) % 3;
                         }
+                        KeyCode::BackTab => {
+                            app.clone_focused_field = if app.clone_focused_field == 0 {
+                                2
+                            } else {
+                                app.clone_focused_field - 1
+                            };
+                        }
                         KeyCode::Enter => {
                             app.trigger_start_cloning();
                         }
+                        // Clone method selector (0)
                         KeyCode::Left | KeyCode::Up if app.clone_focused_field == 0 => {
                             let methods = CloneMethod::all();
                             let current_idx = methods
@@ -251,17 +290,98 @@ async fn run_app(
                             let new_idx = (current_idx + 1) % methods.len();
                             app.clone_method = methods[new_idx];
                         }
+                        // Up/Down field switching
+                        KeyCode::Up if app.clone_focused_field == 1 => {
+                            app.clone_focused_field = 0;
+                        }
+                        KeyCode::Down if app.clone_focused_field == 1 => {
+                            app.clone_focused_field = 2;
+                        }
+                        KeyCode::Up if app.clone_focused_field == 2 => {
+                            app.clone_focused_field = 1;
+                        }
+                        KeyCode::Down if app.clone_focused_field == 2 => {
+                            app.clone_focused_field = 0;
+                        }
+                        // Target directory input (1)
+                        KeyCode::Left if app.clone_focused_field == 1 => {
+                            app.clone_dir_input.move_left();
+                        }
+                        KeyCode::Right if app.clone_focused_field == 1 => {
+                            app.clone_dir_input.move_right();
+                        }
+                        KeyCode::Home if app.clone_focused_field == 1 => {
+                            app.clone_dir_input.move_home();
+                        }
+                        KeyCode::End if app.clone_focused_field == 1 => {
+                            app.clone_dir_input.move_end();
+                        }
                         KeyCode::Backspace if app.clone_focused_field == 1 => {
-                            app.clone_dir_input.pop();
+                            app.clone_dir_input.backspace();
+                        }
+                        KeyCode::Delete if app.clone_focused_field == 1 => {
+                            app.clone_dir_input.delete();
+                        }
+                        KeyCode::Char('a')
+                            if app.clone_focused_field == 1
+                                && key.modifiers.contains(KeyModifiers::CONTROL) =>
+                        {
+                            app.clone_dir_input.move_home();
+                        }
+                        KeyCode::Char('e')
+                            if app.clone_focused_field == 1
+                                && key.modifiers.contains(KeyModifiers::CONTROL) =>
+                        {
+                            app.clone_dir_input.move_end();
+                        }
+                        KeyCode::Char('u')
+                            if app.clone_focused_field == 1
+                                && key.modifiers.contains(KeyModifiers::CONTROL) =>
+                        {
+                            app.clone_dir_input.clear();
                         }
                         KeyCode::Char(c) if app.clone_focused_field == 1 => {
-                            app.clone_dir_input.push(c);
+                            app.clone_dir_input.insert_char(c);
+                        }
+                        // Branch input (2)
+                        KeyCode::Left if app.clone_focused_field == 2 => {
+                            app.clone_branch_input.move_left();
+                        }
+                        KeyCode::Right if app.clone_focused_field == 2 => {
+                            app.clone_branch_input.move_right();
+                        }
+                        KeyCode::Home if app.clone_focused_field == 2 => {
+                            app.clone_branch_input.move_home();
+                        }
+                        KeyCode::End if app.clone_focused_field == 2 => {
+                            app.clone_branch_input.move_end();
                         }
                         KeyCode::Backspace if app.clone_focused_field == 2 => {
-                            app.clone_branch_input.pop();
+                            app.clone_branch_input.backspace();
+                        }
+                        KeyCode::Delete if app.clone_focused_field == 2 => {
+                            app.clone_branch_input.delete();
+                        }
+                        KeyCode::Char('a')
+                            if app.clone_focused_field == 2
+                                && key.modifiers.contains(KeyModifiers::CONTROL) =>
+                        {
+                            app.clone_branch_input.move_home();
+                        }
+                        KeyCode::Char('e')
+                            if app.clone_focused_field == 2
+                                && key.modifiers.contains(KeyModifiers::CONTROL) =>
+                        {
+                            app.clone_branch_input.move_end();
+                        }
+                        KeyCode::Char('u')
+                            if app.clone_focused_field == 2
+                                && key.modifiers.contains(KeyModifiers::CONTROL) =>
+                        {
+                            app.clone_branch_input.clear();
                         }
                         KeyCode::Char(c) if app.clone_focused_field == 2 => {
-                            app.clone_branch_input.push(c);
+                            app.clone_branch_input.insert_char(c);
                         }
                         _ => {}
                     },

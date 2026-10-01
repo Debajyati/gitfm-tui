@@ -74,10 +74,16 @@ When you press `c`, the **Clone Dialog** lets you select the optimal cloning str
 - [Rust & Cargo](https://www.rust-lang.org/tools/install) (1.80+)
 - `git` installed on your system
 
+### Clone the Repo
+
+```bash
+git clone https://github.com/Debajyati/gitfm-tui
+```
+
 ### Quick Run
 
 ```bash
-cd ~/Projects/gitfm-tui
+cd gitfm-tui
 cargo run --release
 ```
 
